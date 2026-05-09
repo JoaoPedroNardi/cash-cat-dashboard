@@ -228,7 +228,32 @@ function Dashboard() {
         />
       </div>
 
-      {loading ? (
+      {/* Insights */}
+      {stats.insights.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <Lightbulb className="h-4 w-4 text-[color:var(--primary)]" />
+            <h2 className="text-sm font-medium text-muted-foreground">Insights</h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {stats.insights.map((ins, i) => {
+              const Icon = ins.icon;
+              const tone = ins.kind === "good" ? "var(--success)"
+                : ins.kind === "warn" ? "var(--destructive)" : "var(--primary)";
+              return (
+                <div key={i} className="flex items-start gap-3 rounded-xl border border-border bg-gradient-card p-4 shadow-card">
+                  <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: `color-mix(in oklab, ${tone} 18%, transparent)`, color: tone }}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <p className="text-sm leading-relaxed">{ins.text}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
         <p className="text-muted-foreground text-center py-12">Carregando...</p>
       ) : txs.length === 0 ? (
         <div className="bg-gradient-card border border-border rounded-2xl p-12 text-center shadow-card">
