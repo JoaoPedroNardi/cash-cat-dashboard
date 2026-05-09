@@ -1,14 +1,11 @@
-import { createFileRoute, Outlet, redirect, Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, Link, Navigate, useRouterState, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated")({
-  beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) throw redirect({ to: "/auth" });
-  },
   component: AuthLayout,
 });
 
@@ -19,6 +16,7 @@ const navItems = [
 ] as const;
 
 function AuthLayout() {
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -28,9 +26,17 @@ function AuthLayout() {
     navigate({ to: "/auth" });
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Carregando...
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/auth" replace />;
+
   return (
     <div className="min-h-screen flex">
-      {/* Sidebar (desktop) */}
       <aside className="hidden md:flex w-64 flex-col border-r border-sidebar-border bg-sidebar p-5">
         <Link to="/dashboard" className="flex items-center gap-2 mb-8">
           <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
@@ -62,7 +68,6 @@ function AuthLayout() {
         </Button>
       </aside>
 
-      {/* Mobile top nav */}
       <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border flex justify-around p-2">
         {navItems.map((item) => {
           const active = pathname === item.to;
