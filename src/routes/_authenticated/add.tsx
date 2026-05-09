@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/_authenticated/add")({
   head: () => ({ meta: [{ title: "Adicionar — Finança" }] }),
@@ -24,6 +26,14 @@ function AddPage() {
 
   const [installmentsOn, setInstallmentsOn] = useState(false);
   const [installments, setInstallments] = useState("2");
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
+  const [accountId, setAccountId] = useState<string>("");
+
+  useEffect(() => {
+    supabase.from("accounts").select("id,name").order("created_at").then(({ data }) => {
+      setAccounts(data ?? []);
+    });
+  }, []);
 
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
   const isInstallment = type === "expense" && installmentsOn;
