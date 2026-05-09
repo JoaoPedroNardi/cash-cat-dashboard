@@ -7,11 +7,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Wallet } from "lucide-react";
 
+import { useAuth } from "@/hooks/use-auth";
+
 export const Route = createFileRoute("/auth")({
-  beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) throw redirect({ to: "/dashboard" });
-  },
   component: AuthPage,
 });
 
