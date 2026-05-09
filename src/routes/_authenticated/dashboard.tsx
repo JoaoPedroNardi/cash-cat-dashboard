@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, getCategory } from "@/lib/categories";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
+  Lightbulb, AlertTriangle, Sparkles, TrendingDown,
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -62,6 +63,8 @@ function Dashboard() {
     const cats = new Map<string, number>();
     const months = new Map<string, { income: number; expense: number }>();
     const daily = new Map<string, { income: number; expense: number }>();
+    const monthCats = new Map<string, number>();
+    const prevMonthCats = new Map<string, number>();
 
     for (const t of txs) {
       if (t.occurred_at >= cutoffStr) {
@@ -72,8 +75,14 @@ function Dashboard() {
         daily.set(t.occurred_at, cur);
       }
       const m = t.occurred_at.slice(0, 7);
-      if (m === monthKey) { if (t.type === "income") monthInc += t.amount; else monthExp += t.amount; }
-      if (m === prevKey) { if (t.type === "income") prevInc += t.amount; else prevExp += t.amount; }
+      if (m === monthKey) {
+        if (t.type === "income") monthInc += t.amount;
+        else { monthExp += t.amount; monthCats.set(t.category, (monthCats.get(t.category) ?? 0) + t.amount); }
+      }
+      if (m === prevKey) {
+        if (t.type === "income") prevInc += t.amount;
+        else { prevExp += t.amount; prevMonthCats.set(t.category, (prevMonthCats.get(t.category) ?? 0) + t.amount); }
+      }
       const mc = months.get(m) ?? { income: 0, expense: 0 };
       mc[t.type] += t.amount;
       months.set(m, mc);
@@ -116,10 +125,57 @@ function Dashboard() {
       ? Math.round(((monthBalance - prevBalance) / Math.abs(prevBalance)) * 100)
       : null;
 
+    // Insights
+    type Insight = { kind: "good" | "warn" | "info"; icon: any; text: string };
+    const insights: Insight[] = [];
+
+    // Maior categoria
+    if (byCat[0]) {
+      insights.push({
+        kind: "info", icon: Sparkles,
+        text: `${byCat[0].name} é sua maior categoria (${formatBRL(byCat[0].value)}).`,
+      });
+    }
+
+    // Variação por categoria mês x mês anterior
+    let biggestVar: { name: string; pct: number } | null = null;
+    for (const [id, v] of monthCats.entries()) {
+      const p = prevMonthCats.get(id) ?? 0;
+      if (p <= 0) continue;
+      const pct = Math.round(((v - p) / p) * 100);
+      if (Math.abs(pct) >= 15 && (!biggestVar || Math.abs(pct) > Math.abs(biggestVar.pct))) {
+        biggestVar = { name: getCategory("expense", id).label, pct };
+      }
+    }
+    if (biggestVar) {
+      insights.push({
+        kind: biggestVar.pct > 0 ? "warn" : "good",
+        icon: biggestVar.pct > 0 ? AlertTriangle : TrendingDown,
+        text: `Você ${biggestVar.pct > 0 ? "gastou" : "gastou menos"} ${Math.abs(biggestVar.pct)}% ${biggestVar.pct > 0 ? "a mais" : ""} em ${biggestVar.name} esse mês vs o anterior.`,
+      });
+    }
+
+    // Tendência últimos 3 meses
+    const last3 = Array.from(months.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-3);
+    if (last3.length === 3) {
+      const balances = last3.map(([, v]) => v.income - v.expense);
+      const trendDown = balances[0] > balances[1] && balances[1] > balances[2];
+      const trendUp = balances[0] < balances[1] && balances[1] < balances[2];
+      if (trendDown) insights.push({ kind: "warn", icon: TrendingDown, text: "Seu saldo vem caindo nos últimos 3 meses." });
+      else if (trendUp) insights.push({ kind: "good", icon: TrendingUp, text: "Seu saldo vem subindo nos últimos 3 meses 🎉" });
+    }
+
+    // Ritmo do mês
+    if (monthInc > 0 && monthExp > monthInc) {
+      insights.push({ kind: "warn", icon: AlertTriangle, text: `Você já gastou ${formatBRL(monthExp - monthInc)} a mais do que ganhou esse mês.` });
+    } else if (savingsRate >= 30) {
+      insights.push({ kind: "good", icon: PiggyBank, text: `Excelente! Você está economizando ${savingsRate}% no período.` });
+    }
+
     return {
       income: inc, expense: exp, balance, savingsRate,
       monthInc, monthExp, monthBalance, monthVar,
-      byCat, byMonth, evolution,
+      byCat, byMonth, evolution, insights,
     };
   }, [txs, range]);
 
@@ -172,6 +228,31 @@ function Dashboard() {
         />
       </div>
 
+      {/* Insights */}
+      {stats.insights.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <Lightbulb className="h-4 w-4 text-[color:var(--primary)]" />
+            <h2 className="text-sm font-medium text-muted-foreground">Insights</h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {stats.insights.map((ins, i) => {
+              const Icon = ins.icon;
+              const tone = ins.kind === "good" ? "var(--success)"
+                : ins.kind === "warn" ? "var(--destructive)" : "var(--primary)";
+              return (
+                <div key={i} className="flex items-start gap-3 rounded-xl border border-border bg-gradient-card p-4 shadow-card">
+                  <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: `color-mix(in oklab, ${tone} 18%, transparent)`, color: tone }}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <p className="text-sm leading-relaxed">{ins.text}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {loading ? (
         <p className="text-muted-foreground text-center py-12">Carregando...</p>
       ) : txs.length === 0 ? (

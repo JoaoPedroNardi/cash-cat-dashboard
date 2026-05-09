@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export const Route = createFileRoute("/_authenticated/add")({
   head: () => ({ meta: [{ title: "Adicionar — Finança" }] }),
@@ -24,6 +26,14 @@ function AddPage() {
 
   const [installmentsOn, setInstallmentsOn] = useState(false);
   const [installments, setInstallments] = useState("2");
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
+  const [accountId, setAccountId] = useState<string>("");
+
+  useEffect(() => {
+    supabase.from("accounts").select("id,name").order("created_at").then(({ data }) => {
+      setAccounts(data ?? []);
+    });
+  }, []);
 
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
   const isInstallment = type === "expense" && installmentsOn;
@@ -68,6 +78,7 @@ function AddPage() {
             category,
             description: label,
             occurred_at: d.toISOString().slice(0, 10),
+            account_id: accountId || null,
           };
         })
       : [{
@@ -77,6 +88,7 @@ function AddPage() {
           category,
           description: baseDesc || null,
           occurred_at: date,
+          account_id: accountId || null,
         }];
 
     const { error } = await supabase.from("transactions").insert(rows);
@@ -204,6 +216,19 @@ function AddPage() {
             <Input id="desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: mercado" />
           </div>
         </div>
+
+        {accounts.length > 0 && (
+          <div className="space-y-2">
+            <Label>Conta / cartão (opcional)</Label>
+            <Select value={accountId || "__none"} onValueChange={(v) => setAccountId(v === "__none" ? "" : v)}>
+              <SelectTrigger><SelectValue placeholder="Sem conta" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">Sem conta</SelectItem>
+                {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <Button type="submit" disabled={loading}
           className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow h-12 text-base">
