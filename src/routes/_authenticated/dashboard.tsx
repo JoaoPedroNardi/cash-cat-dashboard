@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, formatBRL, getCategory } from "@/lib/categories";
+import { formatBRL, getCategory } from "@/lib/categories";
 import { ArrowDownRight, ArrowUpRight, TrendingUp, Wallet } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
