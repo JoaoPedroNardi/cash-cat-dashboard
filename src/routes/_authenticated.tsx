@@ -1,9 +1,13 @@
 import { createFileRoute, Outlet, Link, Navigate, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet } from "lucide-react";
+import {
+  LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, Target, CreditCard, Repeat,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { materializeRecurring } from "@/lib/recurring";
 
 export const Route = createFileRoute("/_authenticated")({
   component: AuthLayout,
@@ -13,12 +17,23 @@ const navItems = [
   { to: "/dashboard", label: "Geral", icon: LayoutDashboard },
   { to: "/add", label: "Adicionar", icon: PlusCircle },
   { to: "/transactions", label: "Histórico", icon: ListOrdered },
+  { to: "/goals", label: "Metas", icon: Target },
+  { to: "/accounts", label: "Contas", icon: CreditCard },
+  { to: "/recurring", label: "Recorrentes", icon: Repeat },
 ] as const;
 
 function AuthLayout() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  useEffect(() => {
+    if (user) {
+      materializeRecurring().then((n) => {
+        if (n > 0) toast.success(`${n} transação(ões) recorrente(s) lançadas`);
+      });
+    }
+  }, [user]);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -37,7 +52,7 @@ function AuthLayout() {
 
   return (
     <div className="min-h-screen flex">
-      <aside className="hidden md:flex w-64 flex-col border-r border-sidebar-border bg-sidebar p-5">
+      <aside className="hidden md:flex w-60 flex-col border-r border-sidebar-border bg-sidebar p-5">
         <Link to="/dashboard" className="flex items-center gap-2 mb-8">
           <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
             <Wallet className="h-4 w-4 text-primary-foreground" />
@@ -68,12 +83,12 @@ function AuthLayout() {
         </Button>
       </aside>
 
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border flex justify-around p-2">
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border flex justify-around p-2 overflow-x-auto">
         {navItems.map((item) => {
           const active = pathname === item.to;
           return (
             <Link key={item.to} to={item.to}
-              className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-md text-xs ${
+              className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded-md text-[10px] shrink-0 ${
                 active ? "text-primary" : "text-sidebar-foreground/60"
               }`}
             >
