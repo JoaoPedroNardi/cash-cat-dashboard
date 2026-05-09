@@ -253,7 +253,7 @@ function Dashboard() {
           </div>
         </div>
       )}
-
+      {loading ? (
         <p className="text-muted-foreground text-center py-12">Carregando...</p>
       ) : txs.length === 0 ? (
         <div className="bg-gradient-card border border-border rounded-2xl p-12 text-center shadow-card">
