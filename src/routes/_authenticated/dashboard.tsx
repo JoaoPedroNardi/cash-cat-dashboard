@@ -68,6 +68,28 @@ function Dashboard() {
     return map;
   }, [accounts, txs]);
 
+  const netWorth = useMemo(() => {
+    if (accounts.length === 0) return { current: 0, series: [] as { date: string; value: number }[] };
+    const initial = accounts.reduce((s, a) => s + Number(a.initial_balance), 0);
+    const sorted = [...txs].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+    const byDay = new Map<string, number>();
+    for (const t of sorted) {
+      const v = (t as any).type === "income" ? t.amount : -t.amount;
+      byDay.set(t.occurred_at, (byDay.get(t.occurred_at) ?? 0) + v);
+    }
+    const days = Array.from(byDay.keys()).sort();
+    let acc = initial;
+    const series = days.map((d) => {
+      acc += byDay.get(d)!;
+      return {
+        date: new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        value: Math.round(acc * 100) / 100,
+      };
+    });
+    if (series.length === 0) series.push({ date: "Hoje", value: initial });
+    return { current: acc, series };
+  }, [accounts, txs]);
+
   const stats = useMemo(() => {
     const now = new Date();
     const cutoff = new Date(now);
@@ -269,6 +291,42 @@ function Dashboard() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Net worth */}
+      {accounts.length > 0 && (
+        <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card mb-8">
+          <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h3 className="font-medium">Patrimônio líquido</h3>
+              <p className="text-2xl md:text-3xl font-semibold tabular-nums mt-1"
+                style={{ color: netWorth.current >= 0 ? "var(--success)" : "var(--destructive)" }}>
+                {formatBRL(netWorth.current)}
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" /> Soma de todas as contas
+            </span>
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer>
+              <AreaChart data={netWorth.series}>
+                <defs>
+                  <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={11}
+                  tickFormatter={(v) => `R$${Math.round(v / 1000)}k`} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
+                <Area type="monotone" dataKey="value" stroke="var(--chart-2)" strokeWidth={2} fill="url(#gradNet)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
