@@ -18,6 +18,8 @@ const navItems = [
   { to: "/dashboard", label: "Geral", icon: LayoutDashboard },
   { to: "/add", label: "Adicionar", icon: PlusCircle },
   { to: "/transactions", label: "Histórico", icon: ListOrdered },
+  { to: "/compare", label: "Comparar", icon: GitCompare },
+  { to: "/import", label: "Importar", icon: Upload },
   { to: "/goals", label: "Metas", icon: Target },
   { to: "/accounts", label: "Contas", icon: CreditCard },
   { to: "/recurring", label: "Recorrentes", icon: Repeat },
