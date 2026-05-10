@@ -509,6 +509,32 @@ function StatCard({
   );
 }
 
+function SectionCard({
+  title, icon, to, empty, emptyText, children,
+}: {
+  title: string; icon: React.ReactNode; to: string;
+  empty: boolean; emptyText: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-gradient-card border border-border rounded-2xl p-5 shadow-card flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <span className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">{icon}</span>
+          {title}
+        </div>
+        <Link to={to} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+          Ver <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+      {empty ? (
+        <p className="text-sm text-muted-foreground py-4 text-center flex-1">{emptyText}</p>
+      ) : (
+        <div className="flex-1">{children}</div>
+      )}
+    </div>
+  );
+}
+
 function MiniCard({
   label, value, tone, trend,
 }: { label: string; value: string; tone: "success" | "destructive"; trend?: number | null }) {
