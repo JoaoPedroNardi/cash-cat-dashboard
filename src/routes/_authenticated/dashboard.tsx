@@ -295,6 +295,42 @@ function Dashboard() {
         </div>
       )}
 
+      {/* Net worth */}
+      {accounts.length > 0 && (
+        <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card mb-8">
+          <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h3 className="font-medium">Patrimônio líquido</h3>
+              <p className="text-2xl md:text-3xl font-semibold tabular-nums mt-1"
+                style={{ color: netWorth.current >= 0 ? "var(--success)" : "var(--destructive)" }}>
+                {formatBRL(netWorth.current)}
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Calendar className="h-3.5 w-3.5" /> Soma de todas as contas
+            </span>
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer>
+              <AreaChart data={netWorth.series}>
+                <defs>
+                  <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={11}
+                  tickFormatter={(v) => `R$${Math.round(v / 1000)}k`} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
+                <Area type="monotone" dataKey="value" stroke="var(--chart-2)" strokeWidth={2} fill="url(#gradNet)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* Quick access: Goals, Accounts, Recurring */}
       <div className="grid gap-4 md:grid-cols-3 mb-8">
         {/* Goals */}
