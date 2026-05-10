@@ -1,10 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, getCategory } from "@/lib/categories";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
   Lightbulb, AlertTriangle, Sparkles, TrendingDown,
+  Target, CreditCard, Repeat, ArrowRight,
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
