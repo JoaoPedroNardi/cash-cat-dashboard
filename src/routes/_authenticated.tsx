@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, Target, CreditCard, Repeat,
+  GitCompare, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
