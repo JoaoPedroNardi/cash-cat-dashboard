@@ -36,19 +36,37 @@ const tooltipStyle = {
 
 function Dashboard() {
   const [txs, setTxs] = useState<Tx[]>([]);
+  const [goals, setGoals] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [recurring, setRecurring] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<30 | 90 | 180>(90);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("transactions")
-        .select("id,type,amount,category,description,occurred_at")
-        .order("occurred_at", { ascending: false });
-      setTxs((data ?? []).map((t) => ({ ...t, amount: Number(t.amount) })));
+      const [tx, g, a, r] = await Promise.all([
+        supabase.from("transactions").select("id,type,amount,category,description,occurred_at,account_id").order("occurred_at", { ascending: false }),
+        supabase.from("goals").select("*").order("created_at", { ascending: false }),
+        supabase.from("accounts").select("*").order("created_at", { ascending: true }),
+        supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
+      ]);
+      setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
+      setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
+      setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
+      setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
       setLoading(false);
     })();
   }, []);
+
+  const accountBalances = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of accounts) map.set(a.id, a.initial_balance);
+    for (const t of txs as any[]) {
+      if (!t.account_id || !map.has(t.account_id)) continue;
+      map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
+    }
+    return map;
+  }, [accounts, txs]);
 
   const stats = useMemo(() => {
     const now = new Date();
