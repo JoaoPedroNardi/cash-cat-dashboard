@@ -68,6 +68,28 @@ function Dashboard() {
     return map;
   }, [accounts, txs]);
 
+  const netWorth = useMemo(() => {
+    if (accounts.length === 0) return { current: 0, series: [] as { date: string; value: number }[] };
+    const initial = accounts.reduce((s, a) => s + Number(a.initial_balance), 0);
+    const sorted = [...txs].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+    const byDay = new Map<string, number>();
+    for (const t of sorted) {
+      const v = (t as any).type === "income" ? t.amount : -t.amount;
+      byDay.set(t.occurred_at, (byDay.get(t.occurred_at) ?? 0) + v);
+    }
+    const days = Array.from(byDay.keys()).sort();
+    let acc = initial;
+    const series = days.map((d) => {
+      acc += byDay.get(d)!;
+      return {
+        date: new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        value: Math.round(acc * 100) / 100,
+      };
+    });
+    if (series.length === 0) series.push({ date: "Hoje", value: initial });
+    return { current: acc, series };
+  }, [accounts, txs]);
+
   const stats = useMemo(() => {
     const now = new Date();
     const cutoff = new Date(now);
