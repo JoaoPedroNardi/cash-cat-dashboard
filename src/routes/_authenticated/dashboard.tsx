@@ -1,10 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, getCategory } from "@/lib/categories";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
   Lightbulb, AlertTriangle, Sparkles, TrendingDown,
+  Target, CreditCard, Repeat, ArrowRight,
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -35,19 +36,37 @@ const tooltipStyle = {
 
 function Dashboard() {
   const [txs, setTxs] = useState<Tx[]>([]);
+  const [goals, setGoals] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [recurring, setRecurring] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<30 | 90 | 180>(90);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("transactions")
-        .select("id,type,amount,category,description,occurred_at")
-        .order("occurred_at", { ascending: false });
-      setTxs((data ?? []).map((t) => ({ ...t, amount: Number(t.amount) })));
+      const [tx, g, a, r] = await Promise.all([
+        supabase.from("transactions").select("id,type,amount,category,description,occurred_at,account_id").order("occurred_at", { ascending: false }),
+        supabase.from("goals").select("*").order("created_at", { ascending: false }),
+        supabase.from("accounts").select("*").order("created_at", { ascending: true }),
+        supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
+      ]);
+      setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
+      setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
+      setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
+      setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
       setLoading(false);
     })();
   }, []);
+
+  const accountBalances = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of accounts) map.set(a.id, a.initial_balance);
+    for (const t of txs as any[]) {
+      if (!t.account_id || !map.has(t.account_id)) continue;
+      map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
+    }
+    return map;
+  }, [accounts, txs]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -253,6 +272,65 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Quick access: Goals, Accounts, Recurring */}
+      <div className="grid gap-4 md:grid-cols-3 mb-8">
+        {/* Goals */}
+        <SectionCard title="Metas" icon={<Target className="h-4 w-4" />} to="/goals" empty={goals.length === 0} emptyText="Crie sua primeira meta">
+          <ul className="space-y-3">
+            {goals.slice(0, 3).map((g) => {
+              const pct = Math.min(100, (g.current_amount / g.target_amount) * 100);
+              return (
+                <li key={g.id}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="truncate">{g.name}</span>
+                    <span className="font-medium tabular-nums" style={{ color: g.color }}>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: g.color }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+
+        {/* Accounts */}
+        <SectionCard title="Contas" icon={<CreditCard className="h-4 w-4" />} to="/accounts" empty={accounts.length === 0} emptyText="Adicione uma conta">
+          <ul className="space-y-2.5">
+            {accounts.slice(0, 4).map((a) => {
+              const bal = accountBalances.get(a.id) ?? a.initial_balance;
+              return (
+                <li key={a.id} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: a.color }} />
+                    <span className="truncate">{a.name}</span>
+                  </span>
+                  <span className="font-medium tabular-nums">{formatBRL(bal)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+
+        {/* Recurring */}
+        <SectionCard title="Próximas recorrentes" icon={<Repeat className="h-4 w-4" />} to="/recurring" empty={recurring.length === 0} emptyText="Sem recorrências ativas">
+          <ul className="space-y-2.5">
+            {recurring.slice(0, 4).map((r) => (
+              <li key={r.id} className="flex items-center justify-between text-sm gap-2">
+                <span className="truncate">
+                  <span className="block truncate">{r.description || getCategory(r.type, r.category).label}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(r.next_run).toLocaleDateString("pt-BR")}</span>
+                </span>
+                <span className={`font-medium tabular-nums shrink-0 ${r.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                  {r.type === "income" ? "+" : "−"}{formatBRL(r.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      </div>
+
       {loading ? (
         <p className="text-muted-foreground text-center py-12">Carregando...</p>
       ) : txs.length === 0 ? (
@@ -426,6 +504,32 @@ function StatCard({
       <p className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
       {sub && (
         <p className={`text-xs mt-1 ${highlight ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{sub}</p>
+      )}
+    </div>
+  );
+}
+
+function SectionCard({
+  title, icon, to, empty, emptyText, children,
+}: {
+  title: string; icon: React.ReactNode; to: string;
+  empty: boolean; emptyText: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-gradient-card border border-border rounded-2xl p-5 shadow-card flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <span className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">{icon}</span>
+          {title}
+        </div>
+        <Link to={to} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+          Ver <ArrowRight className="h-3 w-3" />
+        </Link>
+      </div>
+      {empty ? (
+        <p className="text-sm text-muted-foreground py-4 text-center flex-1">{emptyText}</p>
+      ) : (
+        <div className="flex-1">{children}</div>
       )}
     </div>
   );
