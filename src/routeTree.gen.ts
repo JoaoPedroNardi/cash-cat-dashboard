@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated/transactions'
 import { Route as AuthenticatedRecurringRouteImport } from './routes/_authenticated/recurring'
+import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCompareRouteImport } from './routes/_authenticated/compare'
@@ -43,6 +44,11 @@ const AuthenticatedTransactionsRoute =
 const AuthenticatedRecurringRoute = AuthenticatedRecurringRouteImport.update({
   id: '/recurring',
   path: '/recurring',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedImportRoute = AuthenticatedImportRouteImport.update({
+  id: '/import',
+  path: '/import',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedGoalsRoute = AuthenticatedGoalsRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/compare': typeof AuthenticatedCompareRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/goals': typeof AuthenticatedGoalsRoute
+  '/import': typeof AuthenticatedImportRoute
   '/recurring': typeof AuthenticatedRecurringRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
 }
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/compare': typeof AuthenticatedCompareRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/goals': typeof AuthenticatedGoalsRoute
+  '/import': typeof AuthenticatedImportRoute
   '/recurring': typeof AuthenticatedRecurringRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
 }
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/_authenticated/compare': typeof AuthenticatedCompareRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
+  '/_authenticated/import': typeof AuthenticatedImportRoute
   '/_authenticated/recurring': typeof AuthenticatedRecurringRoute
   '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute
 }
@@ -116,6 +125,7 @@ export interface FileRouteTypes {
     | '/compare'
     | '/dashboard'
     | '/goals'
+    | '/import'
     | '/recurring'
     | '/transactions'
   fileRoutesByTo: FileRoutesByTo
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/compare'
     | '/dashboard'
     | '/goals'
+    | '/import'
     | '/recurring'
     | '/transactions'
   id:
@@ -139,6 +150,7 @@ export interface FileRouteTypes {
     | '/_authenticated/compare'
     | '/_authenticated/dashboard'
     | '/_authenticated/goals'
+    | '/_authenticated/import'
     | '/_authenticated/recurring'
     | '/_authenticated/transactions'
   fileRoutesById: FileRoutesById
@@ -186,6 +198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecurringRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/import': {
+      id: '/_authenticated/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof AuthenticatedImportRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/goals': {
       id: '/_authenticated/goals'
       path: '/goals'
@@ -230,6 +249,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCompareRoute: typeof AuthenticatedCompareRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedGoalsRoute: typeof AuthenticatedGoalsRoute
+  AuthenticatedImportRoute: typeof AuthenticatedImportRoute
   AuthenticatedRecurringRoute: typeof AuthenticatedRecurringRoute
   AuthenticatedTransactionsRoute: typeof AuthenticatedTransactionsRoute
 }
@@ -240,6 +260,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCompareRoute: AuthenticatedCompareRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedGoalsRoute: AuthenticatedGoalsRoute,
+  AuthenticatedImportRoute: AuthenticatedImportRoute,
   AuthenticatedRecurringRoute: AuthenticatedRecurringRoute,
   AuthenticatedTransactionsRoute: AuthenticatedTransactionsRoute,
 }
