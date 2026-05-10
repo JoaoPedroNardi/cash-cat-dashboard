@@ -272,6 +272,65 @@ function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Quick access: Goals, Accounts, Recurring */}
+      <div className="grid gap-4 md:grid-cols-3 mb-8">
+        {/* Goals */}
+        <SectionCard title="Metas" icon={<Target className="h-4 w-4" />} to="/goals" empty={goals.length === 0} emptyText="Crie sua primeira meta">
+          <ul className="space-y-3">
+            {goals.slice(0, 3).map((g) => {
+              const pct = Math.min(100, (g.current_amount / g.target_amount) * 100);
+              return (
+                <li key={g.id}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="truncate">{g.name}</span>
+                    <span className="font-medium tabular-nums" style={{ color: g.color }}>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: g.color }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+
+        {/* Accounts */}
+        <SectionCard title="Contas" icon={<CreditCard className="h-4 w-4" />} to="/accounts" empty={accounts.length === 0} emptyText="Adicione uma conta">
+          <ul className="space-y-2.5">
+            {accounts.slice(0, 4).map((a) => {
+              const bal = accountBalances.get(a.id) ?? a.initial_balance;
+              return (
+                <li key={a.id} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: a.color }} />
+                    <span className="truncate">{a.name}</span>
+                  </span>
+                  <span className="font-medium tabular-nums">{formatBRL(bal)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+
+        {/* Recurring */}
+        <SectionCard title="Próximas recorrentes" icon={<Repeat className="h-4 w-4" />} to="/recurring" empty={recurring.length === 0} emptyText="Sem recorrências ativas">
+          <ul className="space-y-2.5">
+            {recurring.slice(0, 4).map((r) => (
+              <li key={r.id} className="flex items-center justify-between text-sm gap-2">
+                <span className="truncate">
+                  <span className="block truncate">{r.description || getCategory(r.type, r.category).label}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(r.next_run).toLocaleDateString("pt-BR")}</span>
+                </span>
+                <span className={`font-medium tabular-nums shrink-0 ${r.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                  {r.type === "income" ? "+" : "−"}{formatBRL(r.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      </div>
+
       {loading ? (
         <p className="text-muted-foreground text-center py-12">Carregando...</p>
       ) : txs.length === 0 ? (
