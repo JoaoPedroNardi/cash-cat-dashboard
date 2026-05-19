@@ -47,14 +47,15 @@ export const PeriodSelector: React.FC<PeriodSelectorProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 mb-6 bg-white p-4 rounded-lg shadow">
-      <div className="flex gap-4 items-end">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+    <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card mb-6">
+      <div className="flex flex-col md:flex-row gap-6 items-end">
+        {/* Período Selector */}
+        <div className="flex-1 w-full">
+          <label className="block text-sm font-medium text-muted-foreground mb-3">
             Período
           </label>
           <Select value={period} onValueChange={handlePeriodChange}>
-            <SelectTrigger>
+            <SelectTrigger className="w-full border border-border bg-card rounded-xl">
               <SelectValue placeholder="Selecione um período" />
             </SelectTrigger>
             <SelectContent>
@@ -66,9 +67,10 @@ export const PeriodSelector: React.FC<PeriodSelectorProps> = ({
           </Select>
         </div>
 
+        {/* Mês Input - Condicional */}
         {period === 'specific' && (
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="flex-1 w-full animate-in fade-in duration-300">
+            <label className="block text-sm font-medium text-muted-foreground mb-3">
               Selecione o mês
             </label>
             <input
@@ -79,14 +81,20 @@ export const PeriodSelector: React.FC<PeriodSelectorProps> = ({
                   : format(new Date(), 'yyyy-MM')
               }
               onChange={handleMonthChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2.5 border border-border bg-card rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
             />
           </div>
         )}
       </div>
 
-      <div className="text-sm text-gray-600">
-        Mostrando dados de: <span className="font-semibold">{getDisplayText()}</span>
+      {/* Status Text */}
+      <div className="mt-4 pt-4 border-t border-border/30">
+        <p className="text-sm text-muted-foreground">
+          Mostrando dados de:{' '}
+          <span className="font-semibold text-foreground capitalize">
+            {getDisplayText()}
+          </span>
+        </p>
       </div>
     </div>
   );
