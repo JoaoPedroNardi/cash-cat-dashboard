@@ -97,10 +97,8 @@ function Dashboard() {
   }, [accounts, txs]);
 
   const stats = useMemo(() => {
-    const now = new Date();
-    const cutoffStr = filter.dateRange.startDate.toISOString().slice(0, 10);
-    cutoff.setDate(cutoff.getDate() - range);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const now = new Date();
+  const cutoffStr = filter.dateRange.startDate.toISOString().slice(0, 10);
 
     const monthKey = now.toISOString().slice(0, 7);
     const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
