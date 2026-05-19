@@ -1,4 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMonthlyFilter } from "@/hooks/use-monthly-filter";
+import { PeriodSelector } from "@/components/period-selector";
+import { startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, getCategory } from "@/lib/categories";
@@ -33,23 +36,33 @@ function Dashboard() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [recurring, setRecurring] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState<30 | 90 | 180>(90);
+  const { filter, setPeriod, setMonth } = useMonthlyFilter();
 
   useEffect(() => {
-    (async () => {
-      const [tx, g, a, r] = await Promise.all([
-        supabase.from("transactions").select("id,type,amount,category,description,occurred_at,account_id").order("occurred_at", { ascending: false }),
-        supabase.from("goals").select("*").order("created_at", { ascending: false }),
-        supabase.from("accounts").select("*").order("created_at", { ascending: true }),
-        supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
-      ]);
-      setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
-      setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
-      setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
-      setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
-      setLoading(false);
-    })();
-  }, []);
+  (async () => {
+    // Filtro de datas baseado no período selecionado
+    const startDate = filter.dateRange.startDate.toISOString().split('T')[0];
+    const endDate = filter.dateRange.endDate.toISOString().split('T')[0];
+
+    const [tx, g, a, r] = await Promise.all([
+      supabase
+        .from("transactions")
+        .select("id,type,amount,category,description,occurred_at,account_id")
+        .gte("occurred_at", startDate)
+        .lte("occurred_at", endDate)
+        .order("occurred_at", { ascending: false }),
+      supabase.from("goals").select("*").order("created_at", { ascending: false }),
+      supabase.from("accounts").select("*").order("created_at", { ascending: true }),
+      supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
+    ]);
+
+    setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
+    setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
+    setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
+    setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
+    setLoading(false);
+  })();
+}, [filter.dateRange]); // MUDANÇA IMPORTANTE: dependência em filter.dateRange ao invés de []
 
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
@@ -85,7 +98,7 @@ function Dashboard() {
 
   const stats = useMemo(() => {
     const now = new Date();
-    const cutoff = new Date(now);
+    const cutoffStr = filter.dateRange.startDate.toISOString().slice(0, 10);
     cutoff.setDate(cutoff.getDate() - range);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
 
@@ -207,35 +220,29 @@ function Dashboard() {
     }
 
     return {
-      income: inc, expense: exp, balance, savingsRate,
-      monthInc, monthExp, monthBalance, monthVar,
-      byCat, byMonth, evolution, insights,
-    };
-  }, [txs, range]);
+    income: inc, expense: exp, balance, savingsRate,
+    monthInc, monthExp, monthBalance, monthVar,
+    byCat, byMonth, evolution, insights,
+  };
+}, [txs, filter]); // ← MUDANÇA: filter ao invés de range
 
   const maxCat = stats.byCat[0]?.value ?? 0;
 
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <header className="mb-8">
         <div>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Visão geral</h1>
           <p className="text-muted-foreground mt-1">Resumo das suas finanças pessoais</p>
         </div>
-        <div className="inline-flex rounded-xl border border-border bg-card p-1">
-          {[30, 90, 180].map((d) => (
-            <button
-              key={d}
-              onClick={() => setRange(d as 30 | 90 | 180)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                range === d ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
       </header>
+
+<PeriodSelector
+  period={filter.period}
+  selectedMonth={filter.selectedMonth}
+  onPeriodChange={setPeriod}
+  onMonthChange={setMonth}
+/>
 
       {loading ? (
         <p className="text-muted-foreground text-center py-24">Carregando...</p>
@@ -402,7 +409,14 @@ function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Evolução do saldo</h3>
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" /> Últimos {range} dias
+                <Calendar className="h-3.5 w-3.5" />
+                {filter.period === 'specific' && filter.selectedMonth
+                  ? `${new Date(filter.selectedMonth).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+                  : filter.period === 'year'
+                    ? 'Este ano'
+                    : filter.period === '12months'
+                      ? 'Últimos 12 meses'
+                      : 'Todos os meses'}
               </span>
             </div>
             <div className="h-72">

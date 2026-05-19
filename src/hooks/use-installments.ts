@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { DateRange } from './use-monthly-filter';
+import { isBetween } from 'date-fns';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { generateInstallments, type InstallmentInput } from "@/lib/installments";
@@ -91,3 +93,41 @@ export function useInstallments() {
 
   return { addInstallments, loading, error };
 }
+
+export const getInstallmentsByPeriod = (
+  installments: any[],
+  dateRange: DateRange,
+  period: PeriodType,
+) => {
+  if (period === 'specific') {
+    // Mostrar apenas parcelas com vencimento no mês específico
+    return installments
+      .map((inst) => ({
+        ...inst,
+        parcels: inst.parcels?.filter(
+          (parcel: any) =>
+            isBetween(new Date(parcel.due_date), dateRange.startDate, dateRange.endDate)
+        ),
+      }))
+      .filter((inst) => inst.parcels && inst.parcels.length > 0);
+  } else {
+    // Mostrar resumo geral de parcelas ativas
+    return installments.map((inst) => {
+      const paidAmount = inst.parcels
+        ?.filter((p: any) => p.status === 'paid')
+        .reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
+
+      const remainingMonths = Math.ceil(
+        (new Date(inst.end_date).getTime() - new Date().getTime()) / (30 * 24 * 60 * 60 * 1000)
+      );
+
+      return {
+        ...inst,
+        totalValue: inst.total_amount,
+        paidValue: paidAmount,
+        remainingValue: inst.total_amount - paidAmount,
+        remainingMonths,
+      };
+    });
+  }
+};
