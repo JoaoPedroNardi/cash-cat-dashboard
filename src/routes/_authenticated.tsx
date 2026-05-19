@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, Target, CreditCard, Repeat,
-  GitCompare, Upload, PiggyBank,
+  GitCompare, Upload, PiggyBank, CalendarDays, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -15,15 +15,17 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 const navItems = [
-  { to: "/dashboard", label: "Geral", icon: LayoutDashboard },
-  { to: "/add", label: "Adicionar", icon: PlusCircle },
-  { to: "/transactions", label: "Histórico", icon: ListOrdered },
-  { to: "/compare", label: "Comparar", icon: GitCompare },
-  { to: "/import", label: "Importar", icon: Upload },
-  { to: "/budgets", label: "Orçamentos", icon: PiggyBank },
-  { to: "/goals", label: "Metas", icon: Target },
-  { to: "/accounts", label: "Contas", icon: CreditCard },
-  { to: "/recurring", label: "Recorrentes", icon: Repeat },
+  { to: "/dashboard",        label: "Geral",           icon: LayoutDashboard },
+  { to: "/add",              label: "Adicionar",        icon: PlusCircle },
+  { to: "/transactions",     label: "Histórico",        icon: ListOrdered },
+  { to: "/monthly-summary",  label: "Resumo mensal",    icon: BarChart3 },
+  { to: "/compare",          label: "Comparar",         icon: GitCompare },
+  { to: "/import",           label: "Importar",         icon: Upload },
+  { to: "/budgets",          label: "Orçamentos",       icon: PiggyBank },
+  { to: "/goals",            label: "Metas",            icon: Target },
+  { to: "/accounts",         label: "Contas",           icon: CreditCard },
+  { to: "/billing-settings", label: "Datas de fatura",  icon: CalendarDays },
+  { to: "/recurring",        label: "Recorrentes",      icon: Repeat },
 ] as const;
 
 function AuthLayout() {
