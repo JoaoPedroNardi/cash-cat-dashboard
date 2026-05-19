@@ -36,8 +36,7 @@ function AddInstallmentPage() {
     enabled: !!user,
   })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async () => {
     if (!description || !totalAmount || !count || !startDate || !category || !accountId) {
       toast.error('Preencha todos os campos')
       return
@@ -71,35 +70,40 @@ function AddInstallmentPage() {
           <CardTitle>Adicionar Parcelamento</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label>Descrição</Label>
               <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex: Notebook" />
             </div>
 
             <div className="space-y-2">
-              <Label>Valor Total</Label>
-              <Input type="number" step="0.01" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
+              <Label>Valor Total (R$)</Label>
+              <Input type="number" step="0.01" inputMode="decimal" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
             </div>
 
             <div className="space-y-2">
-              <Label>Parcelas</Label>
+              <Label>Número de parcelas</Label>
               <Input type="number" min="2" max="48" value={count} onChange={(e) => setCount(e.target.value)} />
             </div>
 
-            {totalAmount && count && <p className="text-sm text-muted-foreground">R$ {(parseFloat(totalAmount) / parseInt(count)).toFixed(2)} por parcela</p>}
+            {totalAmount && count && parseInt(count) >= 2 && (
+              <div className="rounded-lg bg-primary/10 px-4 py-2 text-sm">
+                <span className="text-muted-foreground">Valor por parcela: </span>
+                <span className="font-semibold text-primary">
+                  {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(parseFloat(totalAmount) / parseInt(count))}
+                </span>
+              </div>
+            )}
 
             <div className="space-y-2">
-              <Label>Data Primeira Parcela</Label>
+              <Label>Data da primeira parcela</Label>
               <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             </div>
 
             <div className="space-y-2">
               <Label>Categoria</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {EXPENSE_CATEGORIES.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>{cat.label}</SelectItem>
@@ -111,21 +115,19 @@ function AddInstallmentPage() {
             <div className="space-y-2">
               <Label>Conta</Label>
               <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
-                  {accounts.map((acc) => (
+                  {accounts.map((acc: any) => (
                     <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? 'Criando...' : 'Criar'}
+            <Button onClick={handleSubmit} disabled={loading} className="w-full bg-gradient-primary text-primary-foreground shadow-glow">
+              {loading ? "Criando parcelas..." : "Criar parcelamento"}
             </Button>
-          </form>
+          </div>
         </CardContent>
       </Card>
     </div>

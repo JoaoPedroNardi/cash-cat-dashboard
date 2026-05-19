@@ -30,9 +30,9 @@ export function useDashboard(dateRange?: DateRange) {
           .from('transactions')
           .select('*')
           .eq('user_id', user.id)
-          .gte('date', dateRange.startDate.toISOString().split('T')[0])
-          .lte('date', dateRange.endDate.toISOString().split('T')[0])
-          .order('date', { ascending: false });
+          .gte('occurred_at', dateRange.startDate.toISOString().split('T')[0])
+          .lte('occurred_at', dateRange.endDate.toISOString().split('T')[0])
+          .order('occurred_at', { ascending: false });
 
         if (txError) throw txError;
 
