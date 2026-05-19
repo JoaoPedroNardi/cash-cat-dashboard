@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { DateRange } from './use-monthly-filter';
-import { isBetween } from 'date-fns';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { generateInstallments, type InstallmentInput } from "@/lib/installments";
@@ -102,13 +101,15 @@ export const getInstallmentsByPeriod = (
   if (period === 'specific') {
     // Mostrar apenas parcelas com vencimento no mês específico
     return installments
-      .map((inst) => ({
-        ...inst,
-        parcels: inst.parcels?.filter(
-          (parcel: any) =>
-            isBetween(new Date(parcel.due_date), dateRange.startDate, dateRange.endDate)
-        ),
-      }))
+  .map((inst) => ({
+    ...inst,
+    parcels: inst.parcels?.filter(
+      (parcel: any) => {
+        const parcelDate = new Date(parcel.due_date);
+        return parcelDate >= dateRange.startDate && parcelDate <= dateRange.endDate;
+      }
+    ),
+  }))
       .filter((inst) => inst.parcels && inst.parcels.length > 0);
   } else {
     // Mostrar resumo geral de parcelas ativas
