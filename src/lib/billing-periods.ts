@@ -50,7 +50,7 @@ export function getBillingPeriodDates(
   }
 
   return {
-    label: `${periodStart.getMonth() + 1}/${periodStart.getFullYear()}`,,
+    label: `${periodStart.getMonth() + 1}/${periodStart.getFullYear()}`,
     start: periodStart,
     end: periodEnd,
     dueDate,

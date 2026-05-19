@@ -1,17 +1,17 @@
 import { useState } from "react";
-import { DateRange, PeriodType } from "./use-monthly-filter";
+import { DateRange } from './use-monthly-filter';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { generateInstallments } from "@/lib/installments";
+import { generateInstallments, type InstallmentInput } from "@/lib/installments";
 import { z } from "zod";
 
 const installmentSchema = z.object({
-  description: z.string().min(1, "Descrição obrigatória"),
+  description: z.string().min(3, "Descrição precisa ter ao menos 3 caracteres"),
   totalAmount: z.number().positive("Valor precisa ser positivo"),
-  installmentCount: z.number().int().min(2, "Mínimo 2 parcelas").max(48, "Máximo 48 parcelas"),
-  startDate: z.string().min(1, "Data obrigatória"),
-  category: z.string().min(1, "Categoria obrigatória"),
-  accountId: z.string().min(1, "Conta obrigatória"),
+  installmentCount: z.number().int().min(2, "Mínimo de 2 parcelas").max(48, "Máximo de 48 parcelas"),
+  startDate: z.string().min(1, "Data é obrigatória"),
+  category: z.string().min(1, "Categoria é obrigatória"),
+  accountId: z.string().min(1, "Conta é obrigatória"),
 });
 
 export type InstallmentFormData = z.infer<typeof installmentSchema>;
@@ -22,14 +22,13 @@ export function useInstallments() {
   const [error, setError] = useState<string | null>(null);
 
   const addInstallments = async (data: InstallmentFormData) => {
-    if (!user) return { success: false, error: "Não autenticado" };
+    if (!user) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const parsed = installmentSchema.parse(data);
-      const groupId = crypto.randomUUID();
 
       const installments = generateInstallments({
         description: parsed.description,
@@ -41,24 +40,47 @@ export function useInstallments() {
         type: "expense",
       });
 
-      // Insere diretamente nas transactions com installment_group
-      const rows = installments.map((inst) => ({
+      // Criar o grupo de parcelamento
+      const { data: group, error: groupError } = await supabase
+        .from("installment_groups")
+        .insert({
+          user_id: user.id,
+          description: parsed.description,
+          total_amount: parsed.totalAmount,
+          installment_count: parsed.installmentCount,
+          start_date: parsed.startDate,
+          account_id: parsed.accountId,
+        })
+        .select()
+        .single();
+
+      if (groupError || !group) {
+        throw new Error(groupError?.message ?? "Erro ao criar grupo de parcelamento");
+      }
+
+      // Criar as transações (uma por parcela)
+      const transactions = installments.map((inst) => ({
         user_id: user.id,
-        type: "expense" as const,
         description: inst.description,
         amount: inst.amount,
-        occurred_at: inst.dueDate.toISOString().split("T")[0],
+        date: inst.dueDate.toISOString().split("T")[0],
         category: inst.category,
         account_id: inst.accountId,
-        installment_group: groupId,
-        installment_index: inst.installmentNumber,
+        type: "expense" as const,
+        installment_group_id: group.id,
+        installment_number: inst.installmentNumber,
         installment_total: inst.installmentTotal,
       }));
 
-      const { error: txErr } = await supabase.from("transactions").insert(rows);
-      if (txErr) throw new Error(txErr.message);
+      const { error: txnError } = await supabase
+        .from("transactions")
+        .insert(transactions);
 
-      return { success: true };
+      if (txnError) {
+        throw new Error(txnError.message);
+      }
+
+      return { success: true, groupId: group.id };
     } catch (err: any) {
       const msg = err?.message ?? "Erro desconhecido";
       setError(msg);
@@ -70,3 +92,43 @@ export function useInstallments() {
 
   return { addInstallments, loading, error };
 }
+
+export const getInstallmentsByPeriod = (
+  installments: any[],
+  dateRange: DateRange,
+  period: PeriodType,
+) => {
+  if (period === 'specific') {
+    // Mostrar apenas parcelas com vencimento no mês específico
+    return installments
+  .map((inst) => ({
+    ...inst,
+    parcels: inst.parcels?.filter(
+      (parcel: any) => {
+        const parcelDate = new Date(parcel.due_date);
+        return parcelDate >= dateRange.startDate && parcelDate <= dateRange.endDate;
+      }
+    ),
+  }))
+      .filter((inst) => inst.parcels && inst.parcels.length > 0);
+  } else {
+    // Mostrar resumo geral de parcelas ativas
+    return installments.map((inst) => {
+      const paidAmount = inst.parcels
+        ?.filter((p: any) => p.status === 'paid')
+        .reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
+
+      const remainingMonths = Math.ceil(
+        (new Date(inst.end_date).getTime() - new Date().getTime()) / (30 * 24 * 60 * 60 * 1000)
+      );
+
+      return {
+        ...inst,
+        totalValue: inst.total_amount,
+        paidValue: paidAmount,
+        remainingValue: inst.total_amount - paidAmount,
+        remainingMonths,
+      };
+    });
+  }
+};

@@ -15,36 +15,50 @@ export interface MonthlySummaryData {
   breakdown: MonthlyBreakdownItem[];
   activeInstallments: {
     description: string;
-    installmentTotal: number;
-    installmentIndex: number;
-    amount: number;
-    occurred_at: string;
+    totalAmount: number;
+    paidCount: number;
+    remainingCount: number;
+    remainingAmount: number;
+    nextDueDate: string;
   }[];
 }
 
 export async function fetchMonthlySummary(
-  _userId: string,
+  userId: string,
   month: number,
   year: number,
   accountId?: string
 ): Promise<MonthlySummaryData> {
-  // occurred_at é o campo correto na tabela transactions
   const startDate = new Date(year, month, 1).toISOString().split("T")[0];
   const endDate = new Date(year, month + 1, 0).toISOString().split("T")[0];
 
+  // Buscar transações do mês
   let query = supabase
     .from("transactions")
-    .select("id,type,amount,category,description,occurred_at,installment_group,installment_index,installment_total")
+    .select("*")
+    .eq("user_id", userId)
     .gte("occurred_at", startDate)
     .lte("occurred_at", endDate);
 
-  if (accountId) query = query.eq("account_id", accountId);
+  if (accountId) {
+    query = query.eq("account_id", accountId);
+  }
 
-  const [{ data: transactions }, { data: budgets }] = await Promise.all([
-    query,
-    // budgets não tem month/year — busca tudo e usa como limites mensais
-    supabase.from("budgets").select("category,amount"),
-  ]);
+  const { data: transactions } = await query;
+
+  // Buscar orçamentos
+  const { data: budgets } = await supabase
+    .from("budgets")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("month", month + 1)
+    .eq("year", year);
+
+  // Buscar parcelamentos ativos
+  const { data: installments } = await supabase
+    .from("installment_groups")
+    .select("*")
+    .eq("user_id", userId);
 
   const totalIncome = transactions
     ?.filter((t) => t.type === "income")
@@ -55,36 +69,58 @@ export async function fetchMonthlySummary(
     .reduce((acc, t) => acc + Number(t.amount), 0) ?? 0;
 
   // Agrupar por categoria
-  const categoryMap = new Map<string, { total: number; count: number }>();
+  const categoryMap = new Map<string, number>();
   transactions
     ?.filter((t) => t.type === "expense")
     .forEach((t) => {
-      const cur = categoryMap.get(t.category) ?? { total: 0, count: 0 };
-      categoryMap.set(t.category, { total: cur.total + Number(t.amount), count: cur.count + 1 });
+      const current = categoryMap.get(t.category) ?? 0;
+      categoryMap.set(t.category, current + Number(t.amount));
     });
 
-  const budgetMap = new Map((budgets ?? []).map((b: any) => [b.category, Number(b.amount)]));
-
   const breakdown: MonthlyBreakdownItem[] = [];
-  categoryMap.forEach(({ total, count }, category) => {
-    const budgetAmount = budgetMap.get(category) ?? null;
-    const percentage = budgetAmount && budgetAmount > 0
-      ? Math.min(100, Math.round((total / budgetAmount) * 100))
+  categoryMap.forEach((totalExpensesPerCat, category) => {
+    const budget = budgets?.find((b) => b.category === category);
+    const percentage = budget && budget.amount > 0
+      ? Math.round((totalExpensesPerCat / Number(budget.amount)) * 100)
       : 0;
-    breakdown.push({ category, totalExpenses: total, budgetAmount, percentage, transactionCount: count });
-  });
-  breakdown.sort((a, b) => b.totalExpenses - a.totalExpenses);
 
-  // Parcelas ativas no mês
-  const activeInstallments = (transactions ?? [])
-    .filter((t) => t.installment_group && t.installment_total && t.installment_total > 1 && t.type === "expense")
-    .map((t) => ({
-      description: t.description ?? "",
-      installmentTotal: t.installment_total!,
-      installmentIndex: t.installment_index!,
-      amount: Number(t.amount),
-      occurred_at: t.occurred_at,
-    }));
+    breakdown.push({
+      category,
+      totalExpenses: totalExpensesPerCat,
+      budgetAmount: budget ? Number(budget.amount) : null,
+      percentage: Math.min(percentage, 100),
+      transactionCount: transactions?.filter(
+        (t) => t.category === category && t.type === "expense"
+      ).length ?? 0,
+    });
+  });
+
+  // Parcelamentos ativos (com parcelas restantes)
+  const activeInstallments = (installments ?? [])
+    .filter((inst) => {
+      const start = new Date(inst.start_date);
+      const totalMonths = (month - start.getMonth()) + (year - start.getFullYear()) * 12;
+      return totalMonths < inst.installment_count;
+    })
+    .map((inst) => {
+      const start = new Date(inst.start_date);
+      const totalMonths = (month - start.getMonth()) + (year - start.getFullYear()) * 12;
+      const paidCount = Math.max(0, totalMonths);
+      const remainingCount = inst.installment_count - paidCount;
+      const installmentAmount = Math.round((Number(inst.total_amount) / inst.installment_count) * 100) / 100;
+      const remainingAmount = Math.round(installmentAmount * remainingCount * 100) / 100;
+      const nextDueDate = new Date(year, month, 1);
+      nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+
+      return {
+        description: inst.description,
+        totalAmount: Number(inst.total_amount),
+        paidCount,
+        remainingCount,
+        remainingAmount,
+        nextDueDate: nextDueDate.toISOString().split("T")[0],
+      };
+    });
 
   return {
     totalIncome,
