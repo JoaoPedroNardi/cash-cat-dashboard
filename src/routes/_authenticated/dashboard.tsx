@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMonthlyFilter } from "@/hooks/use-monthly-filter";
-import { PeriodSelector } from "@/components/period-selector";
+import { PeriodSelector } from "@/components/ui/period-selector";
 import { startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
