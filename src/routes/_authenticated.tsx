@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, Target, CreditCard, Repeat,
-  GitCompare, Upload, PiggyBank, CalendarDays, BarChart3,
+  GitCompare, Upload, PiggyBank, CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -18,7 +18,6 @@ const navItems = [
   { to: "/dashboard",        label: "Geral",           icon: LayoutDashboard },
   { to: "/add",              label: "Adicionar",        icon: PlusCircle },
   { to: "/transactions",     label: "Histórico",        icon: ListOrdered },
-  { to: "/monthly-summary",  label: "Resumo mensal",    icon: BarChart3 },
   { to: "/compare",          label: "Comparar",         icon: GitCompare },
   { to: "/import",           label: "Importar",         icon: Upload },
   { to: "/budgets",          label: "Orçamentos",       icon: PiggyBank },
