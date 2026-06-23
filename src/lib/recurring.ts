@@ -1,14 +1,24 @@
 import { supabase } from "@/integrations/supabase/client";
+import { dateToYMD } from "@/lib/utils";
 
 function addInterval(d: Date, freq: "weekly" | "monthly" | "yearly"): Date {
   const n = new Date(d);
-  if (freq === "weekly") n.setDate(n.getDate() + 7);
-  else if (freq === "monthly") n.setMonth(n.getMonth() + 1);
-  else n.setFullYear(n.getFullYear() + 1);
+  if (freq === "weekly") {
+    n.setDate(n.getDate() + 7);
+  } else if (freq === "monthly") {
+    // Preserva o dia, mas sem estourar para o mês seguinte (31/jan -> 28/fev).
+    const day = n.getDate();
+    n.setDate(1);
+    n.setMonth(n.getMonth() + 1);
+    const lastDay = new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate();
+    n.setDate(Math.min(day, lastDay));
+  } else {
+    n.setFullYear(n.getFullYear() + 1);
+  }
   return n;
 }
 
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
+const ymd = (d: Date) => dateToYMD(d);
 
 /**
  * For each active recurring template, generate transaction rows for every

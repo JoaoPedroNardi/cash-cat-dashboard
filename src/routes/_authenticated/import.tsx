@@ -91,7 +91,7 @@ function parseCSV(text: string): Row[] {
     const cols = splitCSVLine(lines[i], sep);
     const date = parseDate(cols[di] ?? "");
     const amt = parseAmount(cols[ai] ?? "");
-    if (!date || amt === null) continue;
+    if (!date || amt === null || amt === 0) continue;
     const desc = (desci >= 0 ? cols[desci] : "") || "";
     let type: "income" | "expense";
     if (ti >= 0 && cols[ti]) {
@@ -117,7 +117,7 @@ function parseOFX(text: string): Row[] {
     };
     const date = parseDate(get("DTPOSTED"));
     const amt = parseAmount(get("TRNAMT"));
-    if (!date || amt === null) continue;
+    if (!date || amt === null || amt === 0) continue;
     const desc = get("MEMO") || get("NAME") || "";
     const type: "income" | "expense" = amt >= 0 ? "income" : "expense";
     rows.push({ selected: true, date, amount: Math.abs(amt), type, description: desc, category: "outros" });
