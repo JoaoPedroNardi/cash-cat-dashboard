@@ -26,14 +26,13 @@ Dashboard para controle de gastos e ganhos pessoais, com metas, orçamentos, con
 
 ### 1.2 Rodar as migrations
 
-No painel do Supabase, vá em **SQL Editor** e execute os arquivos na ordem:
+No painel do Supabase, vá em **SQL Editor** e execute o schema completo:
 
 ```
-supabase/migrations/20260509231229_...sql   ← tabela transactions
-supabase/migrations/20260509234844_...sql   ← goals, accounts, recurring
-supabase/migrations/20260511000800_...sql   ← budgets
-supabase/migrations/20260511120000_fixes.sql ← correções e índices
+supabase/migrations/20260623000000_schema.sql   ← cria todas as tabelas, enums, índices e RLS
 ```
+
+O script é idempotente — pode rodar mais de uma vez sem problema.
 
 Ou, se tiver o CLI do Supabase instalado (`npm install -g supabase`):
 
