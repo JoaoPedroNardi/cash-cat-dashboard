@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, Target, CreditCard, Repeat,
-  GitCompare, Upload, PiggyBank, CalendarDays,
+  GitCompare, Upload, PiggyBank, CalendarDays, Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/_authenticated")({
 const navItems = [
   { to: "/dashboard",        label: "Geral",           icon: LayoutDashboard },
   { to: "/add",              label: "Adicionar",        icon: PlusCircle },
+  { to: "/installments",     label: "Parcelados",       icon: Layers },
   { to: "/transactions",     label: "Histórico",        icon: ListOrdered },
   { to: "/compare",          label: "Comparar",         icon: GitCompare },
   { to: "/import",           label: "Importar",         icon: Upload },

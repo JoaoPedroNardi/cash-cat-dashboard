@@ -58,6 +58,7 @@ function AddPage() {
     if (!u.user) { toast.error("Sessão expirada"); setLoading(false); return; }
 
     const baseDesc = description.trim();
+    const groupId = crypto.randomUUID();
 
     const rows = isInstallment
       ? Array.from({ length: parsedInstallments }, (_, i) => {
@@ -76,6 +77,9 @@ function AddPage() {
             description: label,
             occurred_at: addMonthsYMD(date, i),
             account_id: accountId || null,
+            installment_group_id: groupId,
+            installment_number: i + 1,
+            installment_total: parsedInstallments,
           };
         })
       : [{

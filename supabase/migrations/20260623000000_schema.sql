@@ -36,8 +36,17 @@ create table if not exists public.transactions (
   description text,
   occurred_at date not null default current_date,
   account_id  uuid references public.accounts(id) on delete set null,
+  -- Parcelamento: parcelas compartilham o mesmo installment_group_id
+  installment_group_id uuid,
+  installment_number   int,
+  installment_total    int,
   created_at  timestamptz not null default now()
 );
+
+-- Garante as colunas de parcelamento em bancos que já tinham a tabela
+alter table public.transactions add column if not exists installment_group_id uuid;
+alter table public.transactions add column if not exists installment_number   int;
+alter table public.transactions add column if not exists installment_total    int;
 
 -- 4) Metas --------------------------------------------------------------
 create table if not exists public.goals (
@@ -85,6 +94,7 @@ create table if not exists public.recurring_transactions (
 -- 7) Índices ------------------------------------------------------------
 create index if not exists idx_transactions_user_date on public.transactions(user_id, occurred_at desc);
 create index if not exists idx_transactions_account   on public.transactions(account_id);
+create index if not exists idx_transactions_installment on public.transactions(installment_group_id) where installment_group_id is not null;
 create index if not exists idx_accounts_user          on public.accounts(user_id);
 create index if not exists idx_goals_user             on public.goals(user_id);
 create index if not exists idx_budgets_user_category  on public.budgets(user_id, category);
