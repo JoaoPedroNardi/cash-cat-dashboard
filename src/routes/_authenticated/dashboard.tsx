@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMonthlyFilter } from "@/hooks/use-monthly-filter";
 import { PeriodSelector } from "@/components/ui/period-selector";
-import { startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, getCategory } from "@/lib/categories";
@@ -28,6 +27,15 @@ interface Tx {
   category: string;
   description: string | null;
   occurred_at: string;
+  account_id: string | null;
+}
+
+/** Data local no formato YYYY-MM-DD (sem deslocamento de fuso do toISOString). */
+function toYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function Dashboard() {
@@ -38,49 +46,35 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const { filter, setPeriod, setMonth } = useMonthlyFilter();
 
+  // Busca TODAS as transações uma única vez. Cada métrica escolhe sua própria
+  // janela de tempo no cliente — assim "patrimônio" é sempre de todos os tempos
+  // e o período selecionado nunca conflita com outros cálculos.
   useEffect(() => {
-  (async () => {
-    // Filtro de datas baseado no período selecionado
-    const startDate = filter.dateRange.startDate.toISOString().split('T')[0];
-    const endDate = filter.dateRange.endDate.toISOString().split('T')[0];
+    (async () => {
+      const [tx, g, a, r] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("id,type,amount,category,description,occurred_at,account_id")
+          .order("occurred_at", { ascending: false }),
+        supabase.from("goals").select("*").order("created_at", { ascending: false }),
+        supabase.from("accounts").select("*").order("created_at", { ascending: true }),
+        supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
+      ]);
 
-    const [tx, g, a, r] = await Promise.all([
-      supabase
-        .from("transactions")
-        .select("id,type,amount,category,description,occurred_at,account_id")
-        .gte("occurred_at", startDate)
-        .lte("occurred_at", endDate)
-        .order("occurred_at", { ascending: false }),
-      supabase.from("goals").select("*").order("created_at", { ascending: false }),
-      supabase.from("accounts").select("*").order("created_at", { ascending: true }),
-      supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
-    ]);
+      setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
+      setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
+      setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
+      setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
+      setLoading(false);
+    })();
+  }, []);
 
-    setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
-    setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
-    setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
-    setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
-    setLoading(false);
-  })();
-}, [filter.dateRange]); // MUDANÇA IMPORTANTE: dependência em filter.dateRange ao invés de []
-
-  const accountBalances = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const a of accounts) map.set(a.id, a.initial_balance);
-    for (const t of txs as any[]) {
-      if (!t.account_id || !map.has(t.account_id)) continue;
-      map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
-    }
-    return map;
-  }, [accounts, txs]);
-
+  // ─── Patrimônio líquido: SEMPRE de todos os tempos (não depende do filtro) ───
   const netWorth = useMemo(() => {
-    if (accounts.length === 0) return { current: 0, series: [] as { date: string; value: number }[] };
     const initial = accounts.reduce((s, a) => s + Number(a.initial_balance), 0);
-    const sorted = [...txs].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
     const byDay = new Map<string, number>();
-    for (const t of sorted) {
-      const v = (t as any).type === "income" ? t.amount : -t.amount;
+    for (const t of txs) {
+      const v = t.type === "income" ? t.amount : -t.amount;
       byDay.set(t.occurred_at, (byDay.get(t.occurred_at) ?? 0) + v);
     }
     const days = Array.from(byDay.keys()).sort();
@@ -88,7 +82,7 @@ function Dashboard() {
     const series = days.map((d) => {
       acc += byDay.get(d)!;
       return {
-        date: new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        date: new Date(d + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
         value: Math.round(acc * 100) / 100,
       };
     });
@@ -96,41 +90,55 @@ function Dashboard() {
     return { current: acc, series };
   }, [accounts, txs]);
 
+  const accountBalances = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of accounts) map.set(a.id, a.initial_balance);
+    for (const t of txs) {
+      if (!t.account_id || !map.has(t.account_id)) continue;
+      map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
+    }
+    return map;
+  }, [accounts, txs]);
+
+  // ─── Tudo que segue depende do período selecionado ───
   const stats = useMemo(() => {
-  const now = new Date();
-  const cutoffStr = filter.dateRange.startDate.toISOString().slice(0, 10);
+    const startStr = toYMD(filter.dateRange.startDate);
+    const endStr = toYMD(filter.dateRange.endDate);
 
-    const monthKey = now.toISOString().slice(0, 7);
-    const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevKey = prevDate.toISOString().slice(0, 7);
+    // Período anterior de mesmo tamanho, para comparação de tendência.
+    const lenMs = filter.dateRange.endDate.getTime() - filter.dateRange.startDate.getTime();
+    const prevEnd = new Date(filter.dateRange.startDate.getTime() - 1);
+    const prevStart = new Date(filter.dateRange.startDate.getTime() - lenMs);
+    const prevStartStr = toYMD(prevStart);
+    const prevEndStr = toYMD(prevEnd);
+    // 'all' começa no ano 2000 — comparar com o "período anterior" não faz sentido.
+    const canCompare = filter.period !== "all";
 
-    let inc = 0, exp = 0, monthInc = 0, monthExp = 0, prevInc = 0, prevExp = 0;
+    const periodTxs = txs.filter((t) => t.occurred_at >= startStr && t.occurred_at <= endStr);
+
+    let inc = 0, exp = 0, prevInc = 0, prevExp = 0;
     const cats = new Map<string, number>();
     const months = new Map<string, { income: number; expense: number }>();
     const daily = new Map<string, { income: number; expense: number }>();
-    const monthCats = new Map<string, number>();
-    const prevMonthCats = new Map<string, number>();
 
-    for (const t of txs) {
-      if (t.occurred_at >= cutoffStr) {
-        if (t.type === "income") inc += t.amount;
-        else { exp += t.amount; cats.set(t.category, (cats.get(t.category) ?? 0) + t.amount); }
-        const cur = daily.get(t.occurred_at) ?? { income: 0, expense: 0 };
-        cur[t.type] += t.amount;
-        daily.set(t.occurred_at, cur);
-      }
+    for (const t of periodTxs) {
+      if (t.type === "income") inc += t.amount;
+      else { exp += t.amount; cats.set(t.category, (cats.get(t.category) ?? 0) + t.amount); }
+      const cur = daily.get(t.occurred_at) ?? { income: 0, expense: 0 };
+      cur[t.type] += t.amount;
+      daily.set(t.occurred_at, cur);
       const m = t.occurred_at.slice(0, 7);
-      if (m === monthKey) {
-        if (t.type === "income") monthInc += t.amount;
-        else { monthExp += t.amount; monthCats.set(t.category, (monthCats.get(t.category) ?? 0) + t.amount); }
-      }
-      if (m === prevKey) {
-        if (t.type === "income") prevInc += t.amount;
-        else { prevExp += t.amount; prevMonthCats.set(t.category, (prevMonthCats.get(t.category) ?? 0) + t.amount); }
-      }
       const mc = months.get(m) ?? { income: 0, expense: 0 };
       mc[t.type] += t.amount;
       months.set(m, mc);
+    }
+
+    if (canCompare) {
+      for (const t of txs) {
+        if (t.occurred_at < prevStartStr || t.occurred_at > prevEndStr) continue;
+        if (t.type === "income") prevInc += t.amount;
+        else prevExp += t.amount;
+      }
     }
 
     const byCat = Array.from(cats.entries()).map(([id, value]) => {
@@ -145,110 +153,138 @@ function Dashboard() {
         month: new Date(m + "-02").toLocaleDateString("pt-BR", { month: "short" }),
         income: v.income,
         expense: v.expense,
-        balance: v.income - v.expense,
       }));
 
-    // Cumulative balance evolution
+    // Evolução acumulada do saldo dentro do período
     const sortedDays = Array.from(daily.keys()).sort();
     let acc = 0;
     const evolution = sortedDays.map((d) => {
       const v = daily.get(d)!;
       acc += v.income - v.expense;
       return {
-        date: new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+        date: new Date(d + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
         saldo: Math.round(acc * 100) / 100,
-        income: v.income,
-        expense: v.expense,
       };
     });
 
     const balance = inc - exp;
     const savingsRate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0;
-    const monthBalance = monthInc - monthExp;
     const prevBalance = prevInc - prevExp;
-    const monthVar = prevBalance !== 0
-      ? Math.round(((monthBalance - prevBalance) / Math.abs(prevBalance)) * 100)
+    const balanceTrend = canCompare && prevBalance !== 0
+      ? Math.round(((balance - prevBalance) / Math.abs(prevBalance)) * 100)
       : null;
 
-    // Insights
+    // ─── Insights (sempre relativos ao período) ───
     type Insight = { kind: "good" | "warn" | "info"; icon: any; text: string };
     const insights: Insight[] = [];
 
-    // Maior categoria
     if (byCat[0]) {
       insights.push({
         kind: "info", icon: Sparkles,
-        text: `${byCat[0].name} é sua maior categoria (${formatBRL(byCat[0].value)}).`,
+        text: `${byCat[0].name} é sua maior categoria de gasto (${formatBRL(byCat[0].value)}).`,
       });
     }
 
-    // Variação por categoria mês x mês anterior
-    let biggestVar: { name: string; pct: number } | null = null;
-    for (const [id, v] of monthCats.entries()) {
-      const p = prevMonthCats.get(id) ?? 0;
-      if (p <= 0) continue;
-      const pct = Math.round(((v - p) / p) * 100);
-      if (Math.abs(pct) >= 15 && (!biggestVar || Math.abs(pct) > Math.abs(biggestVar.pct))) {
-        biggestVar = { name: getCategory("expense", id).label, pct };
-      }
-    }
-    if (biggestVar) {
+    if (exp > inc && inc > 0) {
       insights.push({
-        kind: biggestVar.pct > 0 ? "warn" : "good",
-        icon: biggestVar.pct > 0 ? AlertTriangle : TrendingDown,
-        text: `Você ${biggestVar.pct > 0 ? "gastou" : "gastou menos"} ${Math.abs(biggestVar.pct)}% ${biggestVar.pct > 0 ? "a mais" : ""} em ${biggestVar.name} esse mês vs o anterior.`,
+        kind: "warn", icon: AlertTriangle,
+        text: `Você gastou ${formatBRL(exp - inc)} a mais do que ganhou no período.`,
+      });
+    } else if (savingsRate >= 30) {
+      insights.push({
+        kind: "good", icon: PiggyBank,
+        text: `Excelente! Você economizou ${savingsRate}% do que ganhou no período.`,
       });
     }
 
-    // Tendência últimos 3 meses
-    const last3 = Array.from(months.entries()).sort(([a], [b]) => a.localeCompare(b)).slice(-3);
-    if (last3.length === 3) {
-      const balances = last3.map(([, v]) => v.income - v.expense);
-      const trendDown = balances[0] > balances[1] && balances[1] > balances[2];
-      const trendUp = balances[0] < balances[1] && balances[1] < balances[2];
-      if (trendDown) insights.push({ kind: "warn", icon: TrendingDown, text: "Seu saldo vem caindo nos últimos 3 meses." });
-      else if (trendUp) insights.push({ kind: "good", icon: TrendingUp, text: "Seu saldo vem subindo nos últimos 3 meses 🎉" });
-    }
-
-    // Ritmo do mês
-    if (monthInc > 0 && monthExp > monthInc) {
-      insights.push({ kind: "warn", icon: AlertTriangle, text: `Você já gastou ${formatBRL(monthExp - monthInc)} a mais do que ganhou esse mês.` });
-    } else if (savingsRate >= 30) {
-      insights.push({ kind: "good", icon: PiggyBank, text: `Excelente! Você está economizando ${savingsRate}% no período.` });
+    if (balanceTrend !== null && Math.abs(balanceTrend) >= 10) {
+      insights.push({
+        kind: balanceTrend > 0 ? "good" : "warn",
+        icon: balanceTrend > 0 ? TrendingUp : TrendingDown,
+        text: `Seu saldo ${balanceTrend > 0 ? "subiu" : "caiu"} ${Math.abs(balanceTrend)}% em relação ao período anterior.`,
+      });
     }
 
     return {
-    income: inc, expense: exp, balance, savingsRate,
-    monthInc, monthExp, monthBalance, monthVar,
-    byCat, byMonth, evolution, insights,
-  };
-}, [txs, filter]); // ← MUDANÇA: filter ao invés de range
+      income: inc, expense: exp, balance, savingsRate, balanceTrend,
+      byCat, byMonth, evolution, insights,
+      hasData: periodTxs.length > 0,
+      multiMonth: months.size > 1,
+    };
+  }, [txs, filter]);
 
   const maxCat = stats.byCat[0]?.value ?? 0;
+
+  const periodLabel =
+    filter.period === "specific" && filter.selectedMonth
+      ? new Date(filter.selectedMonth).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+      : filter.period === "year" ? "Este ano"
+      : filter.period === "12months" ? "Últimos 12 meses"
+      : "Todos os meses";
+
+  if (loading) {
+    return (
+      <div className="p-6 md:p-10 max-w-7xl mx-auto">
+        <p className="text-muted-foreground text-center py-24">Carregando...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto">
       <header className="mb-8">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Visão geral</h1>
-          <p className="text-muted-foreground mt-1">Resumo das suas finanças pessoais</p>
-        </div>
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Visão geral</h1>
+        <p className="text-muted-foreground mt-1">Resumo das suas finanças pessoais</p>
       </header>
 
-<PeriodSelector
-  period={filter.period}
-  selectedMonth={filter.selectedMonth}
-  onPeriodChange={setPeriod}
-  onMonthChange={setMonth}
-/>
+      {/* ── Patrimônio líquido — número-herói, sempre de todos os tempos ── */}
+      <div className="bg-gradient-primary text-primary-foreground rounded-2xl p-6 md:p-8 shadow-card mb-8">
+        <div className="flex items-end justify-between flex-wrap gap-2 mb-4">
+          <div>
+            <p className="text-sm text-primary-foreground/80 flex items-center gap-1.5">
+              <Wallet className="h-4 w-4" /> Patrimônio líquido
+            </p>
+            <p className="text-3xl md:text-5xl font-semibold tabular-nums mt-1">
+              {formatBRL(netWorth.current)}
+            </p>
+          </div>
+          <span className="text-xs text-primary-foreground/70">Soma de todas as contas · atualizado em tempo real</span>
+        </div>
+        {accounts.length > 0 && (
+          <div className="h-40">
+            <ResponsiveContainer>
+              <AreaChart data={netWorth.series}>
+                <defs>
+                  <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="currentColor" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" stroke="currentColor" opacity={0.6} fontSize={11} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
+                <Area type="monotone" dataKey="value" stroke="currentColor" strokeWidth={2} fill="url(#gradNet)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
 
-      {loading ? (
-        <p className="text-muted-foreground text-center py-24">Carregando...</p>
-      ) : (
-        <>
+      {/* ── Análise por período ── */}
+      <div className="flex items-center gap-2 mb-3">
+        <Calendar className="h-4 w-4 text-[color:var(--primary)]" />
+        <h2 className="text-sm font-medium text-muted-foreground">Análise por período</h2>
+      </div>
+
+      <PeriodSelector
+        period={filter.period}
+        selectedMonth={filter.selectedMonth}
+        onPeriodChange={setPeriod}
+        onMonthChange={setMonth}
+      />
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
         <StatCard label="Saldo do período" value={formatBRL(stats.balance)}
-          icon={<Wallet className="h-5 w-5" />} highlight />
+          icon={<Wallet className="h-5 w-5" />} highlight trend={stats.balanceTrend} />
         <StatCard label="Ganhos" value={formatBRL(stats.income)}
           icon={<ArrowUpRight className="h-5 w-5" />} accent="success" />
         <StatCard label="Gastos" value={formatBRL(stats.expense)}
@@ -256,18 +292,6 @@ function Dashboard() {
         <StatCard label="Taxa de economia" value={`${stats.savingsRate}%`}
           icon={<PiggyBank className="h-5 w-5" />} accent="primary"
           sub={stats.savingsRate >= 20 ? "Ótimo ritmo" : stats.savingsRate >= 0 ? "Tudo certo" : "Atenção"} />
-      </div>
-
-      {/* Month summary */}
-      <div className="grid gap-4 md:grid-cols-3 mb-8">
-        <MiniCard label="Ganhos do mês" value={formatBRL(stats.monthInc)} tone="success" />
-        <MiniCard label="Gastos do mês" value={formatBRL(stats.monthExp)} tone="destructive" />
-        <MiniCard
-          label="Saldo do mês"
-          value={formatBRL(stats.monthBalance)}
-          tone={stats.monthBalance >= 0 ? "success" : "destructive"}
-          trend={stats.monthVar}
-        />
       </div>
 
       {/* Insights */}
@@ -296,125 +320,23 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Net worth */}
-      {accounts.length > 0 && (
-        <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card mb-8">
-          <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
-            <div>
-              <h3 className="font-medium">Patrimônio líquido</h3>
-              <p className="text-2xl md:text-3xl font-semibold tabular-nums mt-1"
-                style={{ color: netWorth.current >= 0 ? "var(--success)" : "var(--destructive)" }}>
-                {formatBRL(netWorth.current)}
-              </p>
-            </div>
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3.5 w-3.5" /> Soma de todas as contas
-            </span>
-          </div>
-          <div className="h-56">
-            <ResponsiveContainer>
-              <AreaChart data={netWorth.series}>
-                <defs>
-                  <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} />
-                <YAxis stroke="var(--muted-foreground)" fontSize={11}
-                  tickFormatter={(v) => `R$${Math.round(v / 1000)}k`} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
-                <Area type="monotone" dataKey="value" stroke="var(--chart-2)" strokeWidth={2} fill="url(#gradNet)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Quick access: Goals, Accounts, Recurring */}
-      <div className="grid gap-4 md:grid-cols-3 mb-8">
-        {/* Goals */}
-        <SectionCard title="Metas" icon={<Target className="h-4 w-4" />} to="/goals" empty={goals.length === 0} emptyText="Crie sua primeira meta">
-          <ul className="space-y-3">
-            {goals.slice(0, 3).map((g) => {
-              const pct = Math.min(100, (g.current_amount / g.target_amount) * 100);
-              return (
-                <li key={g.id}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="truncate">{g.name}</span>
-                    <span className="font-medium tabular-nums" style={{ color: g.color }}>{pct.toFixed(0)}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: g.color }} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </SectionCard>
-
-        {/* Accounts */}
-        <SectionCard title="Contas" icon={<CreditCard className="h-4 w-4" />} to="/accounts" empty={accounts.length === 0} emptyText="Adicione uma conta">
-          <ul className="space-y-2.5">
-            {accounts.slice(0, 4).map((a) => {
-              const bal = accountBalances.get(a.id) ?? a.initial_balance;
-              return (
-                <li key={a.id} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 truncate">
-                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: a.color }} />
-                    <span className="truncate">{a.name}</span>
-                  </span>
-                  <span className="font-medium tabular-nums">{formatBRL(bal)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </SectionCard>
-
-        {/* Recurring */}
-        <SectionCard title="Próximas recorrentes" icon={<Repeat className="h-4 w-4" />} to="/recurring" empty={recurring.length === 0} emptyText="Sem recorrências ativas">
-          <ul className="space-y-2.5">
-            {recurring.slice(0, 4).map((r) => (
-              <li key={r.id} className="flex items-center justify-between text-sm gap-2">
-                <span className="truncate">
-                  <span className="block truncate">{r.description || getCategory(r.type, r.category).label}</span>
-                  <span className="text-xs text-muted-foreground">{new Date(r.next_run).toLocaleDateString("pt-BR")}</span>
-                </span>
-                <span className={`font-medium tabular-nums shrink-0 ${r.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
-                  {r.type === "income" ? "+" : "−"}{formatBRL(r.amount)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
-      </div>
-
-      {loading ? (
-        <p className="text-muted-foreground text-center py-12">Carregando...</p>
-      ) : txs.length === 0 ? (
-        <div className="bg-gradient-card border border-border rounded-2xl p-12 text-center shadow-card">
+      {!stats.hasData ? (
+        <div className="bg-gradient-card border border-border rounded-2xl p-12 text-center shadow-card mb-8">
           <TrendingUp className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <h3 className="font-medium text-lg">Sem transações ainda</h3>
+          <h3 className="font-medium text-lg">Sem transações em {periodLabel.toLowerCase()}</h3>
           <p className="text-muted-foreground text-sm mt-1">
-            Adicione seu primeiro gasto ou ganho para ver o painel ganhar vida.
+            Escolha outro período acima ou{" "}
+            <Link to="/add" className="text-[color:var(--primary)] hover:underline">adicione uma transação</Link>.
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Evolution area chart - large */}
+        <div className="grid gap-6 lg:grid-cols-3 mb-8">
+          {/* Evolução do saldo */}
           <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Evolução do saldo</h3>
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5" />
-                {filter.period === 'specific' && filter.selectedMonth
-                  ? `${new Date(filter.selectedMonth).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
-                  : filter.period === 'year'
-                    ? 'Este ano'
-                    : filter.period === '12months'
-                      ? 'Últimos 12 meses'
-                      : 'Todos os meses'}
+              <span className="text-xs text-muted-foreground flex items-center gap-1 capitalize">
+                <Calendar className="h-3.5 w-3.5" /> {periodLabel}
               </span>
             </div>
             <div className="h-72">
@@ -438,124 +360,170 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Pie - categories */}
+          {/* Gastos por categoria (pizza + lista) */}
           <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
             <h3 className="font-medium mb-4">Gastos por categoria</h3>
             {stats.byCat.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum gasto no período.</p>
             ) : (
               <>
-                <div className="h-56">
+                <div className="h-48">
                   <ResponsiveContainer>
                     <PieChart>
                       <Pie data={stats.byCat} dataKey="value" nameKey="name"
-                        innerRadius={50} outerRadius={85} paddingAngle={2}>
+                        innerRadius={50} outerRadius={80} paddingAngle={2}>
                         {stats.byCat.map((c, i) => <Cell key={i} fill={c.color} />)}
                       </Pie>
                       <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <ul className="mt-3 space-y-1.5">
-                  {stats.byCat.slice(0, 4).map((c) => (
-                    <li key={c.id} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2 truncate">
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
-                        <span className="truncate">{c.name}</span>
-                      </span>
-                      <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
-                    </li>
-                  ))}
+                <ul className="mt-4 space-y-3">
+                  {stats.byCat.slice(0, 5).map((c) => {
+                    const pct = maxCat > 0 ? (c.value / maxCat) * 100 : 0;
+                    return (
+                      <li key={c.id}>
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="flex items-center gap-2 truncate">
+                            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                            <span className="truncate">{c.name}</span>
+                          </span>
+                          <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} />
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </>
             )}
           </div>
 
-          {/* Income vs Expense bars */}
-          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-2">
-            <h3 className="font-medium mb-4">Ganhos vs Gastos por mês</h3>
-            <div className="h-64">
-              <ResponsiveContainer>
-                <BarChart data={stats.byMonth}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-                  <YAxis stroke="var(--muted-foreground)" fontSize={12}
-                    tickFormatter={(v) => `R$${Math.round(v / 1000)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="income" name="Ganhos" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="expense" name="Gastos" fill="var(--chart-4)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Ganhos vs Gastos por mês — só faz sentido com mais de um mês */}
+          {stats.multiMonth && (
+            <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-3">
+              <h3 className="font-medium mb-4">Ganhos vs Gastos por mês</h3>
+              <div className="h-64">
+                <ResponsiveContainer>
+                  <BarChart data={stats.byMonth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
+                    <YAxis stroke="var(--muted-foreground)" fontSize={12}
+                      tickFormatter={(v) => `R$${Math.round(v / 1000)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="income" name="Ganhos" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="expense" name="Gastos" fill="var(--chart-4)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Top categories progress */}
-          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
-            <h3 className="font-medium mb-4">Top categorias</h3>
-            {stats.byCat.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sem dados.</p>
-            ) : (
-              <ul className="space-y-4">
-                {stats.byCat.slice(0, 5).map((c) => {
-                  const pct = maxCat > 0 ? (c.value / maxCat) * 100 : 0;
+          {/* Transações recentes do período */}
+          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-3">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium">Transações recentes</h3>
+              <Link to="/transactions" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                Ver todas <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+            <ul className="divide-y divide-border">
+              {txs
+                .filter((t) => t.occurred_at >= toYMD(filter.dateRange.startDate) && t.occurred_at <= toYMD(filter.dateRange.endDate))
+                .slice(0, 8)
+                .map((t) => {
+                  const c = getCategory(t.type, t.category);
+                  const Icon = c.icon;
                   return (
-                    <li key={c.id}>
-                      <div className="flex justify-between text-sm mb-1.5">
-                        <span className="truncate">{c.name}</span>
-                        <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
+                    <li key={t.id} className="flex items-center gap-4 py-3">
+                      <div className="h-10 w-10 rounded-xl flex items-center justify-center"
+                        style={{ background: `color-mix(in oklab, ${c.color} 20%, transparent)`, color: c.color }}>
+                        <Icon className="h-5 w-5" />
                       </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{ width: `${pct}%`, background: c.color }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{t.description || c.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {c.label} • {new Date(t.occurred_at + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </p>
                       </div>
+                      <span className={`font-semibold tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                        {t.type === "income" ? "+" : "−"}{formatBRL(t.amount)}
+                      </span>
                     </li>
                   );
                 })}
-              </ul>
-            )}
-          </div>
-
-          {/* Recent transactions */}
-          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-3">
-            <h3 className="font-medium mb-4">Transações recentes</h3>
-            <ul className="divide-y divide-border">
-              {txs.slice(0, 8).map((t) => {
-                const c = getCategory(t.type, t.category);
-                const Icon = c.icon;
-                return (
-                  <li key={t.id} className="flex items-center gap-4 py-3">
-                    <div className="h-10 w-10 rounded-xl flex items-center justify-center"
-                      style={{ background: `color-mix(in oklab, ${c.color} 20%, transparent)`, color: c.color }}>
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{t.description || c.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {c.label} • {new Date(t.occurred_at).toLocaleDateString("pt-BR")}
-                      </p>
-                    </div>
-                    <span className={`font-semibold tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
-                      {t.type === "income" ? "+" : "−"}{formatBRL(t.amount)}
-                    </span>
-                  </li>
-                );
-              })}
             </ul>
           </div>
         </div>
       )}
-        </>
-      )}
+
+      {/* ── Atalhos: Metas, Contas, Recorrentes (independentes do período) ── */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <SectionCard title="Metas" icon={<Target className="h-4 w-4" />} to="/goals" empty={goals.length === 0} emptyText="Crie sua primeira meta">
+          <ul className="space-y-3">
+            {goals.slice(0, 3).map((g) => {
+              const pct = Math.min(100, (g.current_amount / g.target_amount) * 100);
+              return (
+                <li key={g.id}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="truncate">{g.name}</span>
+                    <span className="font-medium tabular-nums" style={{ color: g.color }}>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: g.color }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+
+        <SectionCard title="Contas" icon={<CreditCard className="h-4 w-4" />} to="/accounts" empty={accounts.length === 0} emptyText="Adicione uma conta">
+          <ul className="space-y-2.5">
+            {accounts.slice(0, 4).map((a) => {
+              const bal = accountBalances.get(a.id) ?? a.initial_balance;
+              return (
+                <li key={a.id} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 truncate">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: a.color }} />
+                    <span className="truncate">{a.name}</span>
+                  </span>
+                  <span className="font-medium tabular-nums">{formatBRL(bal)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+
+        <SectionCard title="Próximas recorrentes" icon={<Repeat className="h-4 w-4" />} to="/recurring" empty={recurring.length === 0} emptyText="Sem recorrências ativas">
+          <ul className="space-y-2.5">
+            {recurring.slice(0, 4).map((r) => (
+              <li key={r.id} className="flex items-center justify-between text-sm gap-2">
+                <span className="truncate">
+                  <span className="block truncate">{r.description || getCategory(r.type, r.category).label}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(r.next_run + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                </span>
+                <span className={`font-medium tabular-nums shrink-0 ${r.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                  {r.type === "income" ? "+" : "−"}{formatBRL(r.amount)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      </div>
     </div>
   );
 }
 
 function StatCard({
-  label, value, icon, accent = "primary", highlight, sub,
+  label, value, icon, accent = "primary", highlight, sub, trend,
 }: {
   label: string; value: string; icon: React.ReactNode;
   accent?: "primary" | "success" | "destructive"; highlight?: boolean; sub?: string;
+  trend?: number | null;
 }) {
   const tone =
     accent === "destructive" ? "var(--destructive)" :
@@ -570,6 +538,11 @@ function StatCard({
         </div>
       </div>
       <p className="text-2xl md:text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
+      {trend !== undefined && trend !== null && (
+        <p className={`text-xs mt-1 ${highlight ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+          {trend >= 0 ? "▲" : "▼"} {Math.abs(trend)}% vs período anterior
+        </p>
+      )}
       {sub && (
         <p className={`text-xs mt-1 ${highlight ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{sub}</p>
       )}
@@ -598,26 +571,6 @@ function SectionCard({
         <p className="text-sm text-muted-foreground py-4 text-center flex-1">{emptyText}</p>
       ) : (
         <div className="flex-1">{children}</div>
-      )}
-    </div>
-  );
-}
-
-function MiniCard({
-  label, value, tone, trend,
-}: { label: string; value: string; tone: "success" | "destructive"; trend?: number | null }) {
-  const color = tone === "success" ? "var(--success)" : "var(--destructive)";
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4 flex items-center justify-between">
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-lg font-semibold tabular-nums mt-0.5" style={{ color }}>{value}</p>
-      </div>
-      {trend !== undefined && trend !== null && (
-        <span className={`text-xs px-2 py-1 rounded-md font-medium ${trend >= 0 ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}
-          style={{ background: `color-mix(in oklab, ${trend >= 0 ? "var(--success)" : "var(--destructive)"} 14%, transparent)` }}>
-          {trend >= 0 ? "+" : ""}{trend}%
-        </span>
       )}
     </div>
   );
