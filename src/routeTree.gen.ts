@@ -14,14 +14,12 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated/transactions'
 import { Route as AuthenticatedRecurringRouteImport } from './routes/_authenticated/recurring'
-import { Route as AuthenticatedMonthlySummaryRouteImport } from './routes/_authenticated/monthly-summary'
 import { Route as AuthenticatedImportRouteImport } from './routes/_authenticated/import'
 import { Route as AuthenticatedGoalsRouteImport } from './routes/_authenticated/goals'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedCompareRouteImport } from './routes/_authenticated/compare'
 import { Route as AuthenticatedBudgetsRouteImport } from './routes/_authenticated/budgets'
 import { Route as AuthenticatedBillingSettingsRouteImport } from './routes/_authenticated/billing-settings'
-import { Route as AuthenticatedAddInstallmentRouteImport } from './routes/_authenticated/add-installment'
 import { Route as AuthenticatedAddRouteImport } from './routes/_authenticated/add'
 import { Route as AuthenticatedAccountsRouteImport } from './routes/_authenticated/accounts'
 
@@ -50,12 +48,6 @@ const AuthenticatedRecurringRoute = AuthenticatedRecurringRouteImport.update({
   path: '/recurring',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedMonthlySummaryRoute =
-  AuthenticatedMonthlySummaryRouteImport.update({
-    id: '/monthly-summary',
-    path: '/monthly-summary',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedImportRoute = AuthenticatedImportRouteImport.update({
   id: '/import',
   path: '/import',
@@ -87,12 +79,6 @@ const AuthenticatedBillingSettingsRoute =
     path: '/billing-settings',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedAddInstallmentRoute =
-  AuthenticatedAddInstallmentRouteImport.update({
-    id: '/add-installment',
-    path: '/add-installment',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedAddRoute = AuthenticatedAddRouteImport.update({
   id: '/add',
   path: '/add',
@@ -109,14 +95,12 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/add': typeof AuthenticatedAddRoute
-  '/add-installment': typeof AuthenticatedAddInstallmentRoute
   '/billing-settings': typeof AuthenticatedBillingSettingsRoute
   '/budgets': typeof AuthenticatedBudgetsRoute
   '/compare': typeof AuthenticatedCompareRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/goals': typeof AuthenticatedGoalsRoute
   '/import': typeof AuthenticatedImportRoute
-  '/monthly-summary': typeof AuthenticatedMonthlySummaryRoute
   '/recurring': typeof AuthenticatedRecurringRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
 }
@@ -125,14 +109,12 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/accounts': typeof AuthenticatedAccountsRoute
   '/add': typeof AuthenticatedAddRoute
-  '/add-installment': typeof AuthenticatedAddInstallmentRoute
   '/billing-settings': typeof AuthenticatedBillingSettingsRoute
   '/budgets': typeof AuthenticatedBudgetsRoute
   '/compare': typeof AuthenticatedCompareRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/goals': typeof AuthenticatedGoalsRoute
   '/import': typeof AuthenticatedImportRoute
-  '/monthly-summary': typeof AuthenticatedMonthlySummaryRoute
   '/recurring': typeof AuthenticatedRecurringRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
 }
@@ -143,14 +125,12 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/accounts': typeof AuthenticatedAccountsRoute
   '/_authenticated/add': typeof AuthenticatedAddRoute
-  '/_authenticated/add-installment': typeof AuthenticatedAddInstallmentRoute
   '/_authenticated/billing-settings': typeof AuthenticatedBillingSettingsRoute
   '/_authenticated/budgets': typeof AuthenticatedBudgetsRoute
   '/_authenticated/compare': typeof AuthenticatedCompareRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/goals': typeof AuthenticatedGoalsRoute
   '/_authenticated/import': typeof AuthenticatedImportRoute
-  '/_authenticated/monthly-summary': typeof AuthenticatedMonthlySummaryRoute
   '/_authenticated/recurring': typeof AuthenticatedRecurringRoute
   '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute
 }
@@ -161,14 +141,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/accounts'
     | '/add'
-    | '/add-installment'
     | '/billing-settings'
     | '/budgets'
     | '/compare'
     | '/dashboard'
     | '/goals'
     | '/import'
-    | '/monthly-summary'
     | '/recurring'
     | '/transactions'
   fileRoutesByTo: FileRoutesByTo
@@ -177,14 +155,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/accounts'
     | '/add'
-    | '/add-installment'
     | '/billing-settings'
     | '/budgets'
     | '/compare'
     | '/dashboard'
     | '/goals'
     | '/import'
-    | '/monthly-summary'
     | '/recurring'
     | '/transactions'
   id:
@@ -194,14 +170,12 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/accounts'
     | '/_authenticated/add'
-    | '/_authenticated/add-installment'
     | '/_authenticated/billing-settings'
     | '/_authenticated/budgets'
     | '/_authenticated/compare'
     | '/_authenticated/dashboard'
     | '/_authenticated/goals'
     | '/_authenticated/import'
-    | '/_authenticated/monthly-summary'
     | '/_authenticated/recurring'
     | '/_authenticated/transactions'
   fileRoutesById: FileRoutesById
@@ -249,13 +223,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecurringRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/monthly-summary': {
-      id: '/_authenticated/monthly-summary'
-      path: '/monthly-summary'
-      fullPath: '/monthly-summary'
-      preLoaderRoute: typeof AuthenticatedMonthlySummaryRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/import': {
       id: '/_authenticated/import'
       path: '/import'
@@ -298,13 +265,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBillingSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/add-installment': {
-      id: '/_authenticated/add-installment'
-      path: '/add-installment'
-      fullPath: '/add-installment'
-      preLoaderRoute: typeof AuthenticatedAddInstallmentRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/add': {
       id: '/_authenticated/add'
       path: '/add'
@@ -325,14 +285,12 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedAccountsRoute: typeof AuthenticatedAccountsRoute
   AuthenticatedAddRoute: typeof AuthenticatedAddRoute
-  AuthenticatedAddInstallmentRoute: typeof AuthenticatedAddInstallmentRoute
   AuthenticatedBillingSettingsRoute: typeof AuthenticatedBillingSettingsRoute
   AuthenticatedBudgetsRoute: typeof AuthenticatedBudgetsRoute
   AuthenticatedCompareRoute: typeof AuthenticatedCompareRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedGoalsRoute: typeof AuthenticatedGoalsRoute
   AuthenticatedImportRoute: typeof AuthenticatedImportRoute
-  AuthenticatedMonthlySummaryRoute: typeof AuthenticatedMonthlySummaryRoute
   AuthenticatedRecurringRoute: typeof AuthenticatedRecurringRoute
   AuthenticatedTransactionsRoute: typeof AuthenticatedTransactionsRoute
 }
@@ -340,14 +298,12 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAccountsRoute: AuthenticatedAccountsRoute,
   AuthenticatedAddRoute: AuthenticatedAddRoute,
-  AuthenticatedAddInstallmentRoute: AuthenticatedAddInstallmentRoute,
   AuthenticatedBillingSettingsRoute: AuthenticatedBillingSettingsRoute,
   AuthenticatedBudgetsRoute: AuthenticatedBudgetsRoute,
   AuthenticatedCompareRoute: AuthenticatedCompareRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedGoalsRoute: AuthenticatedGoalsRoute,
   AuthenticatedImportRoute: AuthenticatedImportRoute,
-  AuthenticatedMonthlySummaryRoute: AuthenticatedMonthlySummaryRoute,
   AuthenticatedRecurringRoute: AuthenticatedRecurringRoute,
   AuthenticatedTransactionsRoute: AuthenticatedTransactionsRoute,
 }
