@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Upload, FileText, Check, X } from "lucide-react";
 import { formatBRL, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/categories";
+import { formatDateBR } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/import")({
@@ -262,7 +263,7 @@ function ImportPage() {
                         <Checkbox checked={r.selected} onCheckedChange={(v) => updateRow(i, { selected: !!v })} />
                       </td>
                       <td className="p-3 tabular-nums whitespace-nowrap">
-                        {new Date(r.date).toLocaleDateString("pt-BR")}
+                        {formatDateBR(r.date)}
                       </td>
                       <td className="p-3 max-w-[280px]">
                         <input value={r.description}

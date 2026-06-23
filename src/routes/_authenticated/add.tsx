@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { todayYMD } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/add")({
@@ -20,7 +21,7 @@ function AddPage() {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string>("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayYMD());
   const [loading, setLoading] = useState(false);
 
   const [installmentsOn, setInstallmentsOn] = useState(false);

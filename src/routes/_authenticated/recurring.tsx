@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Repeat } from "lucide-react";
+import { todayYMD, formatDateBR } from "@/lib/utils";
 import { toast } from "sonner";
 import { materializeRecurring } from "@/lib/recurring";
 
@@ -34,7 +35,7 @@ function RecurringPage() {
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [frequency, setFrequency] = useState<"weekly" | "monthly" | "yearly">("monthly");
-  const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
+  const [start, setStart] = useState(todayYMD());
   const [end, setEnd] = useState("");
 
   const load = async () => {
@@ -163,7 +164,7 @@ function RecurringPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{t.description || c.label}</p>
                       <p className="text-xs text-muted-foreground">
-                        {FREQ_LABEL[t.frequency]} • Próximo: {new Date(t.next_run).toLocaleDateString("pt-BR")}
+                        {FREQ_LABEL[t.frequency]} • Próximo: {formatDateBR(t.next_run)}
                       </p>
                     </div>
                     <span className={`font-semibold tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>

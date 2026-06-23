@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Trash2, Pencil, Search, X } from "lucide-react";
+import { formatDateBR } from "@/lib/utils";
 import { toast } from "sonner";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -175,7 +176,7 @@ function TxList() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{t.description || c.label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {c.label} • {new Date(t.occurred_at).toLocaleDateString("pt-BR")}
+                      {c.label} • {formatDateBR(t.occurred_at)}
                     </p>
                   </div>
                   <span className={`font-semibold ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
