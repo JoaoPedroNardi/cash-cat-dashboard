@@ -236,18 +236,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRecurringRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/import': {
-      id: '/_authenticated/import'
-      path: '/import'
-      fullPath: '/import'
-      preLoaderRoute: typeof AuthenticatedImportRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/installments': {
       id: '/_authenticated/installments'
       path: '/installments'
       fullPath: '/installments'
       preLoaderRoute: typeof AuthenticatedInstallmentsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/import': {
+      id: '/_authenticated/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof AuthenticatedImportRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/goals': {
