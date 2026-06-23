@@ -13,6 +13,9 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   AreaChart, Area, Legend,
 } from "recharts";
+import { todayYMD } from "@/lib/utils";
+import { billingMonthKey, billingCycleRange } from "@/lib/billing";
+import { useBillingClosingDay } from "@/hooks/use-billing-closing-day";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Geral — Finança" }] }),
@@ -45,8 +48,12 @@ function Dashboard() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [recurring, setRecurring] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // Mês em foco — começa no mês atual.
-  const [month, setMonth] = useState<Date>(() => startOfMonth(new Date()));
+  const { day: closingDay } = useBillingClosingDay();
+  // Fatura em foco — começa na fatura que contém o dia de hoje.
+  const [month, setMonth] = useState<Date>(() => {
+    const [y, m] = billingMonthKey(todayYMD(), closingDay).split("-").map(Number);
+    return new Date(y, m - 1, 1);
+  });
 
   // Busca TODAS as transações uma vez. O "saldo total" precisa de tudo;
   // os cards do mês apenas filtram o mês escolhido no cliente.
@@ -78,7 +85,7 @@ function Dashboard() {
     for (const t of sorted) {
       const v = t.type === "income" ? t.amount : -t.amount;
       saldo += v;
-      const mk = t.occurred_at.slice(0, 7);
+      const mk = billingMonthKey(t.occurred_at, closingDay);
       byMonthNet.set(mk, (byMonthNet.get(mk) ?? 0) + v);
     }
     // Série mensal acumulada (mostra o total "subindo" mês a mês)
@@ -90,13 +97,13 @@ function Dashboard() {
       return { label: `${MONTHS_PT[Number(m) - 1].slice(0, 3)}/${y.slice(2)}`, value: Math.round(acc * 100) / 100 };
     });
     return { saldo, series };
-  }, [txs]);
+  }, [txs, closingDay]);
 
   // ── Números do mês em foco ──
   const mStats = useMemo(() => {
     const mk = monthKey(month);
     const prevMk = monthKey(subMonths(month, 1));
-    const monthTxs = txs.filter((t) => t.occurred_at.slice(0, 7) === mk);
+    const monthTxs = txs.filter((t) => billingMonthKey(t.occurred_at, closingDay) === mk);
 
     let inc = 0, exp = 0, prevInc = 0, prevExp = 0;
     const cats = new Map<string, number>();
@@ -105,7 +112,7 @@ function Dashboard() {
       else { exp += t.amount; cats.set(t.category, (cats.get(t.category) ?? 0) + t.amount); }
     }
     for (const t of txs) {
-      if (t.occurred_at.slice(0, 7) !== prevMk) continue;
+      if (billingMonthKey(t.occurred_at, closingDay) !== prevMk) continue;
       if (t.type === "income") prevInc += t.amount;
       else prevExp += t.amount;
     }
@@ -141,13 +148,13 @@ function Dashboard() {
     }
 
     return { inc, exp, available, availableTrend, byCat, insights, count: monthTxs.length, monthTxs };
-  }, [txs, month]);
+  }, [txs, month, closingDay]);
 
   // Barras: ganhos vs gastos dos últimos 6 meses
   const last6 = useMemo(() => {
     const acc = new Map<string, { income: number; expense: number }>();
     for (const t of txs) {
-      const mk = t.occurred_at.slice(0, 7);
+      const mk = billingMonthKey(t.occurred_at, closingDay);
       const cur = acc.get(mk) ?? { income: 0, expense: 0 };
       cur[t.type] += t.amount;
       acc.set(mk, cur);
@@ -156,7 +163,7 @@ function Dashboard() {
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6)
       .map(([k, v]) => ({ month: MONTHS_PT[Number(k.split("-")[1]) - 1].slice(0, 3), income: v.income, expense: v.expense }));
-  }, [txs]);
+  }, [txs, closingDay]);
 
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
@@ -169,8 +176,15 @@ function Dashboard() {
   }, [accounts, txs]);
 
   const maxCat = mStats.byCat[0]?.value ?? 0;
-  const isCurrentMonth = monthKey(month) === monthKey(new Date());
+  const isCurrentMonth = monthKey(month) === billingMonthKey(todayYMD(), closingDay);
   const monthLabel = `${MONTHS_PT[month.getMonth()]} de ${month.getFullYear()}`;
+  const cycle = billingCycleRange(month.getFullYear(), month.getMonth() + 1, closingDay);
+  const fmtDM = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const cycleLabel = `${fmtDM(cycle.start)} a ${fmtDM(cycle.end)}`;
+  const goToCurrent = () => {
+    const [y, m] = billingMonthKey(todayYMD(), closingDay).split("-").map(Number);
+    setMonth(new Date(y, m - 1, 1));
+  };
 
   if (loading) {
     return (
@@ -221,17 +235,20 @@ function Dashboard() {
         )}
       </div>
 
-      {/* ── Navegador de mês ── */}
+      {/* ── Navegador de fatura ── */}
       <div className="flex items-center justify-between gap-4 mb-5">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-[color:var(--primary)]" />
-          <h2 className="text-base font-medium capitalize">{monthLabel}</h2>
+        <div className="flex items-center gap-3">
+          <Calendar className="h-4 w-4 text-[color:var(--primary)] shrink-0" />
+          <div>
+            <h2 className="text-base font-medium leading-tight">Fatura de {monthLabel}</h2>
+            <p className="text-xs text-muted-foreground">{cycleLabel}</p>
+          </div>
         </div>
         <div className="flex items-center gap-1">
           {!isCurrentMonth && (
-            <button onClick={() => setMonth(startOfMonth(new Date()))}
+            <button onClick={goToCurrent}
               className="text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg hover:bg-muted transition-colors">
-              Mês atual
+              Fatura atual
             </button>
           )}
           <button onClick={() => setMonth((m) => startOfMonth(subMonths(m, 1)))}
@@ -289,7 +306,7 @@ function Dashboard() {
       {mStats.count === 0 ? (
         <div className="bg-gradient-card border border-border rounded-2xl p-12 text-center shadow-card mb-8">
           <TrendingUp className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <h3 className="font-medium text-lg">Nenhuma transação em {monthLabel}</h3>
+          <h3 className="font-medium text-lg">Nenhuma transação na fatura de {monthLabel}</h3>
           <p className="text-muted-foreground text-sm mt-1">
             Use as setas acima para ver outro mês ou{" "}
             <Link to="/add" className="text-[color:var(--primary)] hover:underline">adicione uma transação</Link>.
@@ -360,7 +377,7 @@ function Dashboard() {
           {/* Transações do mês */}
           <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-3">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-medium">Transações de {monthLabel}</h3>
+              <h3 className="font-medium">Transações da fatura de {monthLabel}</h3>
               <Link to="/transactions" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
                 Ver todas <ArrowRight className="h-3 w-3" />
               </Link>
