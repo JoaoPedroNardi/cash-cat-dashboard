@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Plus, Target, Trash2, TrendingUp } from "lucide-react";
+import { formatDateBR } from "@/lib/utils";
 import { toast } from "sonner";
 import { PALETTE } from "@/lib/palette";
 
@@ -179,7 +180,7 @@ function GoalsPage() {
                       <TrendingUp className="h-3.5 w-3.5" />
                       {done ? "Concluída 🎉" : `Previsão: ${forecastDays(g)}`}
                     </span>
-                    {g.target_date && <span>Alvo: {new Date(g.target_date).toLocaleDateString("pt-BR")}</span>}
+                    {g.target_date && <span>Alvo: {formatDateBR(g.target_date)}</span>}
                   </div>
                   {!done && (
                     <Button size="sm" variant="secondary" className="w-full mt-4" onClick={() => addContribution(g)}>

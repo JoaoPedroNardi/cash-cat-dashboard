@@ -9,11 +9,14 @@ export function cn(...inputs: ClassValue[]) {
  * Data de hoje no fuso LOCAL, no formato "YYYY-MM-DD" (para inputs type=date).
  * Evita o uso de toISOString(), que converte para UTC e pode adiantar/atrasar o dia.
  */
-export function todayYMD(): string {
-  const d = new Date();
+export function dateToYMD(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+export function todayYMD(): string {
+  return dateToYMD(new Date());
 }
 
 /**

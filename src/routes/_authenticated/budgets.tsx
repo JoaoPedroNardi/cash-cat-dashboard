@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
+import { todayYMD, dateToYMD } from "@/lib/utils";
+import { billingMonthKey, billingCycleRange } from "@/lib/billing";
+import { useBillingClosingDay } from "@/hooks/use-billing-closing-day";
 
 export const Route = createFileRoute("/_authenticated/budgets")({
   head: () => ({ meta: [{ title: "Orçamentos — Finança" }] }),
@@ -20,15 +23,19 @@ function BudgetsPage() {
   const [spent, setSpent] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const { day: closingDay } = useBillingClosingDay();
 
   const load = async () => {
     setLoading(true);
-    const start = new Date(); start.setDate(1);
-    const startStr = start.toISOString().slice(0, 10);
+    // Gasto da fatura atual (não do mês de calendário), para bater com o painel.
+    const [y, m] = billingMonthKey(todayYMD(), closingDay).split("-").map(Number);
+    const cycle = billingCycleRange(y, m, closingDay);
+    const startStr = dateToYMD(cycle.start);
+    const endStr = dateToYMD(cycle.end);
 
     const [{ data: bs }, { data: txs }] = await Promise.all([
       supabase.from("budgets").select("id,category,amount"),
-      supabase.from("transactions").select("category,amount").eq("type", "expense").gte("occurred_at", startStr),
+      supabase.from("transactions").select("category,amount").eq("type", "expense").gte("occurred_at", startStr).lte("occurred_at", endStr),
     ]);
 
     const list = (bs ?? []).map((b: any) => ({ ...b, amount: Number(b.amount) }));
@@ -40,7 +47,7 @@ function BudgetsPage() {
     setSpent(map);
     setLoading(false);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [closingDay]);
 
   const byCat = useMemo(() => {
     const m: Record<string, Budget> = {};
@@ -81,13 +88,13 @@ function BudgetsPage() {
     <div className="p-6 md:p-10 max-w-4xl mx-auto">
       <header className="mb-6">
         <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Orçamentos</h1>
-        <p className="text-muted-foreground mt-1">Limites mensais por categoria</p>
+        <p className="text-muted-foreground mt-1">Limites por categoria · gasto na fatura atual</p>
       </header>
 
       {totalBudget > 0 && (
         <div className="bg-gradient-card border border-border rounded-2xl p-5 shadow-card mb-6">
           <div className="flex justify-between items-baseline mb-2">
-            <p className="text-sm text-muted-foreground">Total do mês</p>
+            <p className="text-sm text-muted-foreground">Total da fatura</p>
             <p className="font-semibold tabular-nums">
               {formatBRL(totalSpent)} <span className="text-muted-foreground">/ {formatBRL(totalBudget)}</span>
             </p>
@@ -133,7 +140,7 @@ function BudgetsPage() {
                       <Progress value={pct} className={over ? "[&>div]:bg-[color:var(--destructive)]" : ""} />
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Sem orçamento definido • gasto este mês: {formatBRL(used)}</p>
+                    <p className="text-xs text-muted-foreground">Sem orçamento definido • gasto na fatura: {formatBRL(used)}</p>
                   )}
                 </div>
 

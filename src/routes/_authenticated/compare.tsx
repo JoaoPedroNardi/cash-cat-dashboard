@@ -6,6 +6,9 @@ import { tooltipStyle } from "@/lib/tooltip-style";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowDownRight, ArrowUpRight, Scale, TrendingDown, TrendingUp } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { todayYMD } from "@/lib/utils";
+import { billingMonthKey } from "@/lib/billing";
+import { useBillingClosingDay } from "@/hooks/use-billing-closing-day";
 
 export const Route = createFileRoute("/_authenticated/compare")({
   head: () => ({ meta: [{ title: "Comparar — Finança" }] }),
@@ -24,6 +27,7 @@ function ComparePage() {
   const [loading, setLoading] = useState(true);
   const [a, setA] = useState<string>("");
   const [b, setB] = useState<string>("");
+  const { day: closingDay } = useBillingClosingDay();
 
   useEffect(() => {
     (async () => {
@@ -33,25 +37,27 @@ function ComparePage() {
         .order("occurred_at", { ascending: false });
       const list = (data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) }));
       setTxs(list);
-      const months = Array.from(new Set(list.map((t) => t.occurred_at.slice(0, 7)))).sort().reverse();
-      const now = new Date().toISOString().slice(0, 7);
-      const prev = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7);
+      const months = Array.from(new Set(list.map((t) => billingMonthKey(t.occurred_at, closingDay)))).sort().reverse();
+      const now = billingMonthKey(todayYMD(), closingDay);
+      const [ny, nm] = now.split("-").map(Number);
+      const prevDate = new Date(ny, nm - 2, 1);
+      const prev = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
       setA(months.includes(now) ? now : months[0] ?? now);
       setB(months.includes(prev) ? prev : months[1] ?? prev);
       setLoading(false);
     })();
-  }, []);
+  }, [closingDay]);
 
   const months = useMemo(
-    () => Array.from(new Set(txs.map((t) => t.occurred_at.slice(0, 7)))).sort().reverse(),
-    [txs]
+    () => Array.from(new Set(txs.map((t) => billingMonthKey(t.occurred_at, closingDay)))).sort().reverse(),
+    [txs, closingDay]
   );
 
   const summary = (key: string) => {
     let inc = 0, exp = 0;
     const cats = new Map<string, number>();
     for (const t of txs) {
-      if (t.occurred_at.slice(0, 7) !== key) continue;
+      if (billingMonthKey(t.occurred_at, closingDay) !== key) continue;
       if (t.type === "income") inc += t.amount;
       else { exp += t.amount; cats.set(t.category, (cats.get(t.category) ?? 0) + t.amount); }
     }
