@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { todayYMD } from "@/lib/utils";
+import { todayYMD, addMonthsYMD } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/add")({
@@ -57,13 +57,10 @@ function AddPage() {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) { toast.error("Sessão expirada"); setLoading(false); return; }
 
-    const baseDate = new Date(date + "T00:00:00");
     const baseDesc = description.trim();
 
     const rows = isInstallment
       ? Array.from({ length: parsedInstallments }, (_, i) => {
-          const d = new Date(baseDate);
-          d.setMonth(d.getMonth() + i);
           const label = `${baseDesc || "Parcelado"} (${i + 1}/${parsedInstallments})`;
           // Distribute cents on the last installment to avoid rounding drift
           const cents = Math.round(perInstallment * 100);
@@ -77,7 +74,7 @@ function AddPage() {
             amount: value,
             category,
             description: label,
-            occurred_at: d.toISOString().slice(0, 10),
+            occurred_at: addMonthsYMD(date, i),
             account_id: accountId || null,
           };
         })

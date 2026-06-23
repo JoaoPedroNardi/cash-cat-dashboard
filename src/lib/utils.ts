@@ -24,3 +24,18 @@ export function todayYMD(): string {
 export function formatDateBR(ymd: string): string {
   return new Date(ymd + "T00:00:00").toLocaleDateString("pt-BR");
 }
+
+/**
+ * Soma `n` meses a uma data "YYYY-MM-DD", preservando o dia mas SEM estourar
+ * para o mês seguinte. Ex.: 31/jan + 1 mês = 28/fev (não 03/mar). Tudo em
+ * string, sem objeto Date intermediário, então não há deslocamento de fuso.
+ */
+export function addMonthsYMD(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const idx = (m - 1) + n;
+  const year = y + Math.floor(idx / 12);
+  const month = ((idx % 12) + 12) % 12; // 0-based, tolera negativos
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const day = Math.min(d, lastDay);
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
