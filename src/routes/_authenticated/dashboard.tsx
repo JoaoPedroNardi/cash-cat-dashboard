@@ -7,7 +7,7 @@ import { tooltipStyle } from "@/lib/tooltip-style";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
   Lightbulb, AlertTriangle, Sparkles, TrendingDown, ChevronLeft, ChevronRight,
-  Target, CreditCard, Repeat, ArrowRight, Coins,
+  CreditCard, Repeat, ArrowRight, Coins,
 } from "lucide-react";
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -44,7 +44,6 @@ function monthKey(d: Date): string {
 
 function Dashboard() {
   const [txs, setTxs] = useState<Tx[]>([]);
-  const [goals, setGoals] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [recurring, setRecurring] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,18 +58,16 @@ function Dashboard() {
   // os cards do mês apenas filtram o mês escolhido no cliente.
   useEffect(() => {
     (async () => {
-      const [tx, g, a, r] = await Promise.all([
+      const [tx, a, r] = await Promise.all([
         supabase
           .from("transactions")
           .select("id,type,amount,category,description,occurred_at,account_id")
           .order("occurred_at", { ascending: false }),
-        supabase.from("goals").select("*").order("created_at", { ascending: false }),
         supabase.from("accounts").select("*").order("created_at", { ascending: true }),
         supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
       ]);
 
       setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
-      setGoals((g.data ?? []).map((x: any) => ({ ...x, target_amount: Number(x.target_amount), current_amount: Number(x.current_amount) })));
       setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
       setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
       setLoading(false);
@@ -410,26 +407,7 @@ function Dashboard() {
       )}
 
       {/* ── Atalhos ── */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <SectionCard title="Metas" icon={<Target className="h-4 w-4" />} to="/goals" empty={goals.length === 0} emptyText="Crie sua primeira meta">
-          <ul className="space-y-3">
-            {goals.slice(0, 3).map((g) => {
-              const pct = Math.min(100, (g.current_amount / g.target_amount) * 100);
-              return (
-                <li key={g.id}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="truncate">{g.name}</span>
-                    <span className="font-medium tabular-nums" style={{ color: g.color }}>{pct.toFixed(0)}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: g.color }} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </SectionCard>
-
+      <div className="grid gap-4 md:grid-cols-2">
         <SectionCard title="Contas" icon={<CreditCard className="h-4 w-4" />} to="/accounts" empty={accounts.length === 0} emptyText="Adicione uma conta">
           <ul className="space-y-2.5">
             {accounts.slice(0, 4).map((a) => {

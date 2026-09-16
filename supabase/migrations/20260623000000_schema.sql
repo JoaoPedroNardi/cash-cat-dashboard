@@ -48,32 +48,7 @@ alter table public.transactions add column if not exists installment_group_id uu
 alter table public.transactions add column if not exists installment_number   int;
 alter table public.transactions add column if not exists installment_total    int;
 
--- 4) Metas --------------------------------------------------------------
-create table if not exists public.goals (
-  id             uuid primary key default gen_random_uuid(),
-  user_id        uuid not null references auth.users(id) on delete cascade,
-  name           text not null,
-  target_amount  numeric not null check (target_amount > 0),
-  current_amount numeric not null default 0 check (current_amount >= 0),
-  target_date    date,
-  color          text not null default 'var(--primary)',
-  icon           text not null default 'target',
-  created_at     timestamptz not null default now(),
-  updated_at     timestamptz not null default now()
-);
-
--- 5) Orçamentos (global por categoria) ----------------------------------
-create table if not exists public.budgets (
-  id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null references auth.users(id) on delete cascade,
-  category   text not null,
-  amount     numeric not null check (amount >= 0),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, category)
-);
-
--- 6) Recorrentes --------------------------------------------------------
+-- 4) Recorrentes ----------------------------------------------------------
 create table if not exists public.recurring_transactions (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
@@ -91,41 +66,39 @@ create table if not exists public.recurring_transactions (
   updated_at  timestamptz not null default now()
 );
 
--- 7) Índices ------------------------------------------------------------
-create index if not exists idx_transactions_user_date on public.transactions(user_id, occurred_at desc);
-create index if not exists idx_transactions_account   on public.transactions(account_id);
-create index if not exists idx_transactions_installment on public.transactions(installment_group_id) where installment_group_id is not null;
-create index if not exists idx_accounts_user          on public.accounts(user_id);
-create index if not exists idx_goals_user             on public.goals(user_id);
-create index if not exists idx_budgets_user_category  on public.budgets(user_id, category);
-create index if not exists idx_recurring_user_active  on public.recurring_transactions(user_id, active, next_run);
+-- Liga cada transação gerada automaticamente à recorrência que a originou
+-- (permite excluir os lançamentos já criados quando a recorrência é removida).
+alter table public.transactions
+  add column if not exists recurring_transaction_id uuid references public.recurring_transactions(id) on delete set null;
 
--- 8) Atualização automática de updated_at -------------------------------
+-- 5) Índices ------------------------------------------------------------
+create index if not exists idx_transactions_user_date   on public.transactions(user_id, occurred_at desc);
+create index if not exists idx_transactions_account     on public.transactions(account_id);
+create index if not exists idx_transactions_installment on public.transactions(installment_group_id) where installment_group_id is not null;
+create index if not exists idx_transactions_recurring    on public.transactions(recurring_transaction_id) where recurring_transaction_id is not null;
+create index if not exists idx_accounts_user            on public.accounts(user_id);
+create index if not exists idx_recurring_user_active    on public.recurring_transactions(user_id, active, next_run);
+
+-- 6) Atualização automática de updated_at -------------------------------
 create or replace function public.set_updated_at()
 returns trigger language plpgsql set search_path = public as $$
 begin new.updated_at = now(); return new; end; $$;
 
 drop trigger if exists trg_accounts_updated  on public.accounts;
-drop trigger if exists trg_goals_updated     on public.goals;
-drop trigger if exists trg_budgets_updated   on public.budgets;
 drop trigger if exists trg_recurring_updated on public.recurring_transactions;
 
 create trigger trg_accounts_updated  before update on public.accounts                for each row execute function public.set_updated_at();
-create trigger trg_goals_updated     before update on public.goals                   for each row execute function public.set_updated_at();
-create trigger trg_budgets_updated   before update on public.budgets                 for each row execute function public.set_updated_at();
 create trigger trg_recurring_updated before update on public.recurring_transactions  for each row execute function public.set_updated_at();
 
--- 9) Segurança (RLS): cada usuário só enxerga os próprios dados ----------
+-- 7) Segurança (RLS): cada usuário só enxerga os próprios dados ----------
 alter table public.accounts               enable row level security;
 alter table public.transactions           enable row level security;
-alter table public.goals                  enable row level security;
-alter table public.budgets                enable row level security;
 alter table public.recurring_transactions enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['accounts','transactions','goals','budgets','recurring_transactions']
+  foreach t in array array['accounts','transactions','recurring_transactions']
   loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(
