@@ -36,7 +36,6 @@ export async function materializeRecurring(): Promise<number> {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayStr = ymd(today);
 
   let created = 0;
 
@@ -54,26 +53,28 @@ export async function materializeRecurring(): Promise<number> {
         description: t.description ? `${t.description} (recorrente)` : "Recorrente",
         occurred_at: ymd(next),
         account_id: t.account_id,
+        recurring_transaction_id: t.id,
       });
       next = addInterval(next, t.frequency);
     }
 
-    if (rows.length > 0) {
-      const { error: insErr } = await supabase.from("transactions").insert(rows);
-      if (!insErr) {
-        created += rows.length;
-        const reachedEnd = end && next > end;
-        await supabase
-          .from("recurring_transactions")
-          .update({
-            next_run: ymd(next),
-            active: reachedEnd ? false : true,
-          })
-          .eq("id", t.id);
-      }
-    } else if (todayStr > t.next_run) {
-      // safety: if no rows generated but next_run is in the past somehow
-    }
+    if (rows.length === 0) continue;
+
+    const reachedEnd = end && next > end;
+    // Reivindica o avanço condicionado ao next_run que acabamos de ler: se outra
+    // chamada concorrente (outra aba, duplo efeito) já processou este template,
+    // o next_run mudou e este update não afeta nenhuma linha — pulamos para não
+    // duplicar os lançamentos.
+    const { data: claimed, error: claimErr } = await supabase
+      .from("recurring_transactions")
+      .update({ next_run: ymd(next), active: reachedEnd ? false : true })
+      .eq("id", t.id)
+      .eq("next_run", t.next_run)
+      .select("id");
+    if (claimErr || !claimed || claimed.length === 0) continue;
+
+    const { error: insErr } = await supabase.from("transactions").insert(rows);
+    if (!insErr) created += rows.length;
   }
 
   return created;

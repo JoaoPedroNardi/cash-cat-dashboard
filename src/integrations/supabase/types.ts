@@ -187,6 +187,7 @@ export type Database = {
           installment_number: number | null
           installment_total: number | null
           occurred_at: string
+          recurring_transaction_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
         }
@@ -201,6 +202,7 @@ export type Database = {
           installment_number?: number | null
           installment_total?: number | null
           occurred_at?: string
+          recurring_transaction_id?: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
         }
@@ -215,6 +217,7 @@ export type Database = {
           installment_number?: number | null
           installment_total?: number | null
           occurred_at?: string
+          recurring_transaction_id?: string | null
           type?: Database["public"]["Enums"]["transaction_type"]
           user_id?: string
         }
@@ -224,6 +227,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_recurring_transaction_id_fkey"
+            columns: ["recurring_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_transactions"
             referencedColumns: ["id"]
           },
         ]

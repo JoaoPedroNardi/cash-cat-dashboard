@@ -76,6 +76,22 @@ function RecurringPage() {
 
   const remove = async (id: string) => {
     if (!confirm("Excluir recorrência?")) return;
+
+    const { count } = await supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("recurring_transaction_id", id);
+
+    if (count && count > 0) {
+      const wipe = confirm(
+        `Essa recorrência já lançou ${count} transação(ões) no histórico. Excluir essas transações também?`
+      );
+      if (wipe) {
+        const { error: txError } = await supabase.from("transactions").delete().eq("recurring_transaction_id", id);
+        if (txError) { toast.error(txError.message); return; }
+      }
+    }
+
     const { error } = await supabase.from("recurring_transactions").delete().eq("id", id);
     if (error) { toast.error(error.message); return; }
     await load();
