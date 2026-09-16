@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, getCategory } from "@/lib/categories";
-import { formatDateBR, todayYMD } from "@/lib/utils";
+import { formatDateBR, todayYMD, baseInstallmentName } from "@/lib/utils";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Trash2, Layers } from "lucide-react";
@@ -37,12 +37,6 @@ interface Plan {
   perInstallment: number;
   nextDue: string | null;
   done: boolean;
-}
-
-/** Remove o sufixo " (3/12)" da descrição para mostrar o nome base da compra. */
-function baseName(desc: string | null): string {
-  if (!desc) return "Parcelado";
-  return desc.replace(/\s*\(\d+\/\d+\)\s*$/, "").trim() || "Parcelado";
 }
 
 function InstallmentsPage() {
@@ -81,7 +75,7 @@ function InstallmentsPage() {
       const nextDue = future[0]?.occurred_at ?? null;
       result.push({
         groupId,
-        description: baseName(arr[0]?.description),
+        description: baseInstallmentName(arr[0]?.description),
         category: arr[0]?.category ?? "outros",
         total,
         count,

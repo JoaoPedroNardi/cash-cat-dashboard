@@ -42,3 +42,9 @@ export function addMonthsYMD(ymd: string, n: number): string {
   const day = Math.min(d, lastDay);
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
+
+/** Remove o sufixo " (3/12)" da descrição para mostrar o nome base da compra. */
+export function baseInstallmentName(desc: string | null): string {
+  if (!desc) return "Parcelado";
+  return desc.replace(/\s*\(\d+\/\d+\)\s*$/, "").trim() || "Parcelado";
+}

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Trash2, Pencil, Search, X } from "lucide-react";
-import { formatDateBR } from "@/lib/utils";
+import { formatDateBR, baseInstallmentName } from "@/lib/utils";
 import { toast } from "sonner";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -36,6 +36,7 @@ interface Tx {
   description: string | null;
   occurred_at: string;
   account_id: string | null;
+  installment_group_id: string | null;
 }
 
 function TxList() {
@@ -52,7 +53,7 @@ function TxList() {
     setLoading(true);
     const { data } = await supabase
       .from("transactions")
-      .select("id,type,amount,category,description,occurred_at,account_id")
+      .select("id,type,amount,category,description,occurred_at,account_id,installment_group_id")
       .order("occurred_at", { ascending: false });
     setTxs((data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
     setLoading(false);
@@ -82,11 +83,36 @@ function TxList() {
     return { inc, exp, balance: inc - exp };
   }, [filtered]);
 
-  const remove = async (id: string) => {
-    const { error } = await supabase.from("transactions").delete().eq("id", id);
+  const remove = async (tx: Tx) => {
+    if (tx.installment_group_id) {
+      const ok = confirm(
+        "Essa transação faz parte de um parcelamento. Excluir só ela vai renumerar as parcelas restantes (ex: \"3 de 10\" pode virar \"3 de 9\"). Continuar?"
+      );
+      if (!ok) return;
+    }
+
+    const { error } = await supabase.from("transactions").delete().eq("id", tx.id);
     if (error) { toast.error(error.message); return; }
+
+    if (tx.installment_group_id) {
+      const { data: siblings } = await supabase
+        .from("transactions")
+        .select("id,description")
+        .eq("installment_group_id", tx.installment_group_id)
+        .order("occurred_at", { ascending: true });
+      if (siblings && siblings.length > 0) {
+        await Promise.all(siblings.map((s, i) =>
+          supabase.from("transactions").update({
+            installment_number: i + 1,
+            installment_total: siblings.length,
+            description: `${baseInstallmentName(s.description)} (${i + 1}/${siblings.length})`,
+          }).eq("id", s.id)
+        ));
+      }
+    }
+
     toast.success("Removido");
-    setTxs((p) => p.filter((t) => t.id !== id));
+    setTxs((p) => p.filter((t) => t.id !== tx.id));
   };
 
   const allCats = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
@@ -186,7 +212,7 @@ function TxList() {
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-primary">
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="ghost" onClick={() => remove(t.id)}
+                  <Button size="icon" variant="ghost" onClick={() => remove(t)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive">
                     <Trash2 className="h-4 w-4" />
                   </Button>
