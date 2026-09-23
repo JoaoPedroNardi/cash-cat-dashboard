@@ -38,6 +38,24 @@ export interface PluggyItem {
   connector: { name: string };
 }
 
+export interface PluggyInvestment {
+  id: string;
+  name: string;
+  code: string | null;
+  type: string;
+  subtype: string | null;
+  balance: number | null;
+  value: number | null;
+  quantity: number | null;
+  amountOriginal: number | null;
+  rate: number | null;
+  rateType: string | null;
+  dueDate: string | null;
+  issuer: string | null;
+  status: string | null;
+  date: string | null;
+}
+
 export class PluggyApiError extends Error {
   constructor(public status: number, body: string) {
     super(`Pluggy API error ${status}: ${body}`);
@@ -113,6 +131,21 @@ export async function listAccounts(itemId: string): Promise<PluggyAccount[]> {
   const apiKey = await getApiKey();
   const { results } = await pluggyFetch<{ results: PluggyAccount[] }>(`/accounts?itemId=${itemId}`, { apiKey });
   return results;
+}
+
+export async function listInvestments(itemId: string): Promise<PluggyInvestment[]> {
+  const apiKey = await getApiKey();
+  const all: PluggyInvestment[] = [];
+  // Carteiras pessoais têm poucos ativos; o limite de páginas é só uma trava de segurança.
+  for (let page = 1; page <= 5; page++) {
+    const data = await pluggyFetch<{ results: PluggyInvestment[]; totalPages: number }>(
+      `/investments?itemId=${itemId}&page=${page}`,
+      { apiKey }
+    );
+    all.push(...data.results);
+    if (page >= data.totalPages) break;
+  }
+  return all;
 }
 
 /**

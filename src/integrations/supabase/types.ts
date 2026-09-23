@@ -175,6 +175,83 @@ export type Database = {
         }
         Relationships: []
       }
+      investments: {
+        Row: {
+          as_of: string | null
+          balance: number
+          bank_connection_id: string | null
+          code: string | null
+          created_at: string
+          due_date: string | null
+          id: string
+          invested_amount: number | null
+          issuer: string | null
+          name: string
+          pluggy_investment_id: string
+          quantity: number | null
+          rate: number | null
+          rate_type: string | null
+          status: string
+          subtype: string | null
+          type: string
+          unit_value: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          as_of?: string | null
+          balance?: number
+          bank_connection_id?: string | null
+          code?: string | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          invested_amount?: number | null
+          issuer?: string | null
+          name: string
+          pluggy_investment_id: string
+          quantity?: number | null
+          rate?: number | null
+          rate_type?: string | null
+          status?: string
+          subtype?: string | null
+          type: string
+          unit_value?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          as_of?: string | null
+          balance?: number
+          bank_connection_id?: string | null
+          code?: string | null
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          invested_amount?: number | null
+          issuer?: string | null
+          name?: string
+          pluggy_investment_id?: string
+          quantity?: number | null
+          rate?: number | null
+          rate_type?: string | null
+          status?: string
+          subtype?: string | null
+          type?: string
+          unit_value?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investments_bank_connection_id_fkey"
+            columns: ["bank_connection_id"]
+            isOneToOne: false
+            referencedRelation: "bank_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recurring_transactions: {
         Row: {
           account_id: string | null

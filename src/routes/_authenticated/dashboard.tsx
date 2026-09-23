@@ -16,6 +16,7 @@ import {
 import { todayYMD } from "@/lib/utils";
 import { billingMonthKey, billingCycleRange } from "@/lib/billing";
 import { useBillingClosingDay } from "@/hooks/use-billing-closing-day";
+import { investmentClass, isActiveInvestment } from "@/lib/investments";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Geral — Finança" }] }),
@@ -71,6 +72,7 @@ function Dashboard() {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [recurring, setRecurring] = useState<any[]>([]);
+  const [investments, setInvestments] = useState<{ type: string; subtype: string | null; balance: number; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const { day: closingDay } = useBillingClosingDay();
   // Fatura em foco — começa na fatura que contém o dia de hoje.
@@ -83,14 +85,18 @@ function Dashboard() {
   // os cards do mês apenas filtram o mês escolhido no cliente.
   useEffect(() => {
     (async () => {
-      const [tx, a, r] = await Promise.all([
+      const [tx, a, r, inv] = await Promise.all([
         supabase
           .from("transactions")
           .select("id,type,amount,category,description,occurred_at,account_id,ignore_in_totals")
           .order("occurred_at", { ascending: false }),
         supabase.from("accounts").select("*").order("created_at", { ascending: true }),
         supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
+        // Se a tabela ainda não existe (schema não atualizado), vem erro e o card fica vazio.
+        supabase.from("investments").select("type,subtype,balance,status"),
       ]);
+
+      setInvestments((inv.data ?? []).map((i: any) => ({ ...i, balance: Number(i.balance) })));
 
       setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
       setAccounts((a.data ?? []).map((x: any) => ({
@@ -199,6 +205,23 @@ function Dashboard() {
     const pctUsed = limit > 0 ? Math.min(100, (owed / limit) * 100) : null;
     return { owed, limit, pctUsed, items };
   }, [accounts, accountBalances]);
+
+  // ── Visão geral: investimentos por classe (só posições ativas) ──
+  const investmentSummary = useMemo(() => {
+    const active = investments.filter((i) => isActiveInvestment(i.status));
+    const total = active.reduce((s, i) => s + i.balance, 0);
+    const byClass = new Map<string, { id: string; label: string; color: string; total: number }>();
+    for (const i of active) {
+      const c = investmentClass(i.type, i.subtype);
+      const g = byClass.get(c.id) ?? { ...c, total: 0 };
+      g.total += i.balance;
+      byClass.set(c.id, g);
+    }
+    const classes = Array.from(byClass.values())
+      .sort((a, b) => b.total - a.total)
+      .map((c) => ({ ...c, pct: total > 0 ? (c.total / total) * 100 : 0 }));
+    return { total, count: active.length, classes };
+  }, [investments]);
 
   // ── Números do mês em foco ──
   const mStats = useMemo(() => {
@@ -376,10 +399,41 @@ function Dashboard() {
           )}
         </OverviewCard>
 
-        <OverviewCard icon={<LineChart className="h-4 w-4" />} label="Investimentos" value="Em breve">
-          <p className="text-sm text-muted-foreground py-2">
-            Acompanhamento de ativos e carteira ainda não disponível — chegando em breve.
-          </p>
+        <OverviewCard icon={<LineChart className="h-4 w-4" />} label="Investimentos" value={formatBRL(investmentSummary.total)}>
+          {investmentSummary.classes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">
+              Nenhum investimento sincronizado ainda. Sincronize uma conta de corretora em{" "}
+              <Link to="/accounts" className="text-[color:var(--primary)] hover:underline">Contas</Link>.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground mt-1">
+                {investmentSummary.count} ativo{investmentSummary.count === 1 ? "" : "s"}
+              </p>
+              <ul className="mt-3 space-y-2.5">
+                {investmentSummary.classes.map((c) => (
+                  <li key={c.id}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="flex items-center gap-2 truncate">
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                        <span className="truncate">{c.label}</span>
+                      </span>
+                      <span className="tabular-nums shrink-0 ml-2">
+                        <span className="text-muted-foreground text-xs mr-2">{c.pct.toFixed(1)}%</span>
+                        <span className="font-medium">{formatBRL(c.total)}</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${c.pct}%`, background: c.color }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <Link to="/investments" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-3">
+                Ver carteira <ArrowRight className="h-3 w-3" />
+              </Link>
+            </>
+          )}
         </OverviewCard>
       </div>
 

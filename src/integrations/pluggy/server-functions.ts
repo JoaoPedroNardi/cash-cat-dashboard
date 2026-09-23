@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { authenticateWithToken } from '@/integrations/supabase/server-auth';
-import { createConnectToken, getItem, listAccounts, listTransactionsPage } from './client.server';
+import { createConnectToken, getItem, listAccounts, listInvestments, listTransactionsPage } from './client.server';
 import { mapPluggyCategory } from './category-map';
 
 // Códigos de banco (BACEN) que conseguimos reconhecer pelo transferNumber. Como o conector
@@ -143,7 +143,42 @@ export const syncItem = createServerFn({ method: 'POST' })
       accounts.push({ localId: localAccountId!, pluggyId: pAccount.id, name: pAccount.name, isNew });
     }
 
-    return { connectionId: connectionId!, accounts, since };
+    // Investimentos (ações, FIIs, ETFs, renda fixa): retrato atual, sobrescrito a cada sincronização.
+    // Uma falha aqui (ex: tabela ainda não criada) não pode derrubar a sincronização das contas.
+    let investmentsSynced = 0;
+    let investmentsError: string | null = null;
+    try {
+      const investments = await listInvestments(pluggyItemId);
+      if (investments.length > 0) {
+        const rows = investments.map((i) => ({
+          user_id: userId,
+          bank_connection_id: connectionId,
+          pluggy_investment_id: i.id,
+          name: i.name,
+          code: i.code ?? null,
+          type: i.type,
+          subtype: i.subtype ?? null,
+          balance: i.balance ?? 0,
+          quantity: i.quantity ?? null,
+          unit_value: i.value ?? null,
+          invested_amount: i.amountOriginal ?? null,
+          rate: i.rate ?? null,
+          rate_type: i.rateType ?? null,
+          due_date: i.dueDate ? i.dueDate.slice(0, 10) : null,
+          issuer: i.issuer ?? null,
+          status: i.status ?? 'ACTIVE',
+          as_of: i.date ? i.date.slice(0, 10) : null,
+        }));
+        const { error } = await supabase.from('investments').upsert(rows, { onConflict: 'pluggy_investment_id' });
+        if (error) throw new Error(error.message);
+        investmentsSynced = rows.length;
+      }
+    } catch (e) {
+      investmentsError = e instanceof Error ? e.message : String(e);
+      console.error('[syncItem] investimentos:', investmentsError);
+    }
+
+    return { connectionId: connectionId!, accounts, since, investmentsSynced, investmentsError };
   });
 
 const transactionsPageSchema = z.object({

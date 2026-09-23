@@ -105,6 +105,31 @@ alter table public.transactions add column if not exists ignore_in_totals boolea
 -- Chave de deduplicação: re-sincronizar nunca insere a mesma transação duas vezes
 alter table public.transactions add column if not exists pluggy_transaction_id text unique;
 
+-- Investimentos sincronizados da corretora/banco via Pluggy (ações, FIIs, ETFs, renda fixa...).
+-- É um retrato do que a instituição informa; cada sincronização sobrescreve os valores.
+create table if not exists public.investments (
+  id                   uuid primary key default gen_random_uuid(),
+  user_id              uuid not null references auth.users(id) on delete cascade,
+  bank_connection_id   uuid references public.bank_connections(id) on delete cascade,
+  pluggy_investment_id text not null unique,
+  name                 text not null,
+  code                 text,
+  type                 text not null,          -- EQUITY, ETF, FIXED_INCOME, MUTUAL_FUND...
+  subtype              text,                   -- STOCK, REAL_ESTATE_FUND, TREASURY...
+  balance              numeric not null default 0,  -- valor atual
+  quantity             numeric,
+  unit_value           numeric,
+  invested_amount      numeric,                -- valor aplicado original, quando a instituição informa
+  rate                 numeric,
+  rate_type            text,                   -- ex: SELIC, CDI, PRE_FIXADO
+  due_date             date,
+  issuer               text,
+  status               text not null default 'ACTIVE',
+  as_of                date,
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now()
+);
+
 -- 6) Índices ------------------------------------------------------------
 create index if not exists idx_transactions_user_date    on public.transactions(user_id, occurred_at desc);
 create index if not exists idx_transactions_account      on public.transactions(account_id);
@@ -115,6 +140,8 @@ create index if not exists idx_accounts_user             on public.accounts(user
 create index if not exists idx_accounts_pluggy           on public.accounts(pluggy_account_id) where pluggy_account_id is not null;
 create index if not exists idx_recurring_user_active     on public.recurring_transactions(user_id, active, next_run);
 create index if not exists idx_bank_connections_user     on public.bank_connections(user_id);
+create index if not exists idx_investments_user          on public.investments(user_id);
+create index if not exists idx_investments_connection    on public.investments(bank_connection_id);
 
 -- 7) Atualização automática de updated_at -------------------------------
 create or replace function public.set_updated_at()
@@ -124,21 +151,24 @@ begin new.updated_at = now(); return new; end; $$;
 drop trigger if exists trg_accounts_updated         on public.accounts;
 drop trigger if exists trg_recurring_updated        on public.recurring_transactions;
 drop trigger if exists trg_bank_connections_updated on public.bank_connections;
+drop trigger if exists trg_investments_updated      on public.investments;
 
 create trigger trg_accounts_updated         before update on public.accounts                for each row execute function public.set_updated_at();
 create trigger trg_recurring_updated        before update on public.recurring_transactions  for each row execute function public.set_updated_at();
 create trigger trg_bank_connections_updated before update on public.bank_connections        for each row execute function public.set_updated_at();
+create trigger trg_investments_updated      before update on public.investments             for each row execute function public.set_updated_at();
 
 -- 8) Segurança (RLS): cada usuário só enxerga os próprios dados ----------
 alter table public.accounts               enable row level security;
 alter table public.transactions           enable row level security;
 alter table public.recurring_transactions enable row level security;
 alter table public.bank_connections       enable row level security;
+alter table public.investments            enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['accounts','transactions','recurring_transactions','bank_connections']
+  foreach t in array array['accounts','transactions','recurring_transactions','bank_connections','investments']
   loop
     execute format('drop policy if exists "own_rows" on public.%I', t);
     execute format(

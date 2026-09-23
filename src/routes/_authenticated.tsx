@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, CreditCard, Repeat,
-  GitCompare, Upload, CalendarDays, Layers,
+  GitCompare, Upload, CalendarDays, Layers, LineChart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ const navItems = [
   { to: "/compare",          label: "Comparar",         icon: GitCompare },
   { to: "/import",           label: "Importar",         icon: Upload },
   { to: "/accounts",         label: "Contas",           icon: CreditCard },
+  { to: "/investments",      label: "Investimentos",    icon: LineChart },
   { to: "/billing-settings", label: "Datas de fatura",  icon: CalendarDays },
   { to: "/recurring",        label: "Recorrentes",      icon: Repeat },
 ] as const;

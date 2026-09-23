@@ -239,7 +239,11 @@ function AccountsPage() {
       // desde a última sincronização que realmente completou.
       await supabase.from("bank_connections").update({ last_synced_at: new Date().toISOString() }).eq("id", sync.connectionId);
 
-      toast.success(`${sync.accounts.length} conta(s), ${inserted} transação(ões) nova(s)`, { id: toastId });
+      const invPart = sync.investmentsSynced > 0 ? `, ${sync.investmentsSynced} investimento(s)` : "";
+      toast.success(`${sync.accounts.length} conta(s), ${inserted} transação(ões) nova(s)${invPart}`, { id: toastId });
+      if (sync.investmentsError) {
+        toast.warning(`Contas sincronizadas, mas os investimentos falharam: ${sync.investmentsError}`);
+      }
       load();
     } catch (e: any) {
       toast.error(e?.message ?? "Erro ao sincronizar", { id: toastId });
