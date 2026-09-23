@@ -120,7 +120,10 @@ function TxList() {
     setTxs((p) => p.filter((t) => t.id !== tx.id));
   };
 
-  const allCats = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES];
+  // Algumas categorias existem nos dois tipos (ex: Outros, Transferências); o filtro é por id.
+  const allCats = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].filter(
+    (c, i, arr) => arr.findIndex((x) => x.id === c.id) === i,
+  );
   const hasFilters = search.q || search.cat || search.kind !== "all" || search.range !== "all";
 
   return (

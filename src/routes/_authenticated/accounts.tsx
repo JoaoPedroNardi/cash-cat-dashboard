@@ -206,7 +206,7 @@ function AccountsPage() {
                 user_id: u.user!.id,
                 type: r.type,
                 amount: r.amount,
-                category: "outros",
+                category: r.category,
                 description: r.description,
                 occurred_at: r.date,
                 account_id: acc.localId,

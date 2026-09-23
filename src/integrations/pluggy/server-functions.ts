@@ -2,6 +2,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { authenticateWithToken } from '@/integrations/supabase/server-auth';
 import { createConnectToken, getItem, listAccounts, listTransactionsPage } from './client.server';
+import { mapPluggyCategory } from './category-map';
 
 // Códigos de banco (BACEN) que conseguimos reconhecer pelo transferNumber. Como o conector
 // MeuPluggy não informa a instituição de origem, este é o único sinal disponível.
@@ -186,14 +187,18 @@ export const getTransactionsPage = createServerFn({ method: 'POST' })
     // amount > 0 é obrigatório no schema (mesma regra da importação de CSV/OFX).
     const rows = page.results
       .filter((t) => t.amount !== 0)
-      .map((t) => ({
-        id: t.id,
-        type: t.type === 'CREDIT' ? ('income' as const) : ('expense' as const),
-        amount: Math.abs(t.amount),
-        description: t.description || null,
-        date: t.date.slice(0, 10),
-        ignoreInTotals: isInternalMovement(t.category, t.description),
-      }));
+      .map((t) => {
+        const type = t.type === 'CREDIT' ? ('income' as const) : ('expense' as const);
+        return {
+          id: t.id,
+          type,
+          amount: Math.abs(t.amount),
+          category: mapPluggyCategory(t.categoryId, t.category, type),
+          description: t.description || null,
+          date: t.date.slice(0, 10),
+          ignoreInTotals: isInternalMovement(t.category, t.description),
+        };
+      });
 
     return { rows, cursor: page.cursor };
   });

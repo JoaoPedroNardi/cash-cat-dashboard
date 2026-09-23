@@ -28,6 +28,7 @@ export interface PluggyTransaction {
   date: string;
   description: string;
   category: string | null;
+  categoryId: string | null;
   type: "CREDIT" | "DEBIT";
 }
 
