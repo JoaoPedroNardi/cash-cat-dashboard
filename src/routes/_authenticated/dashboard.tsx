@@ -103,28 +103,6 @@ function Dashboard() {
     })();
   }, []);
 
-  // ── Saldo total: o que sobrou de TODOS os meses, somando (todos os tempos) ──
-  const total = useMemo(() => {
-    const byMonthNet = new Map<string, number>();
-    let saldo = 0;
-    const sorted = [...txs].sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
-    for (const t of sorted) {
-      const v = t.type === "income" ? t.amount : -t.amount;
-      saldo += v;
-      const mk = billingMonthKey(t.occurred_at, closingDay);
-      byMonthNet.set(mk, (byMonthNet.get(mk) ?? 0) + v);
-    }
-    // Série mensal acumulada (mostra o total "subindo" mês a mês)
-    const keys = Array.from(byMonthNet.keys()).sort();
-    let acc = 0;
-    const series = keys.map((k) => {
-      acc += byMonthNet.get(k)!;
-      const [y, m] = k.split("-");
-      return { label: `${MONTHS_PT[Number(m) - 1].slice(0, 3)}/${y.slice(2)}`, value: Math.round(acc * 100) / 100 };
-    });
-    return { saldo, series };
-  }, [txs, closingDay]);
-
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
     for (const a of accounts) map.set(a.id, a.initial_balance);
@@ -136,6 +114,51 @@ function Dashboard() {
     for (const a of accounts) if (a.synced_balance != null) map.set(a.id, a.synced_balance);
     return map;
   }, [accounts, txs]);
+
+  // ── Saldo total: saldo das contas + cartões (negativos, é dívida) + lançamentos sem conta ──
+  const total = useMemo(() => {
+    const today = todayYMD();
+    const signed = (t: Tx) => (t.type === "income" ? t.amount : -t.amount);
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+
+    let banks = 0, cards = 0, unassigned = 0;
+    for (const a of accounts) {
+      const bal = accountBalances.get(a.id) ?? a.initial_balance;
+      if (a.type === "credit") cards += bal; else banks += bal;
+    }
+    for (const t of txs) if (!t.account_id || !byId.has(t.account_id)) unassigned += signed(t);
+    const saldo = banks + cards + unassigned;
+
+    // Série mensal (fim de cada mês até hoje). Contas sincronizadas partem do saldo real de hoje e
+    // desfazem o que aconteceu depois de cada data; as demais partem do saldo inicial e somam até a data.
+    const past = txs.filter((t) => t.occurred_at <= today);
+    const series: { label: string; value: number }[] = [];
+    if (past.length > 0) {
+      const first = past.reduce((min, t) => (t.occurred_at < min ? t.occurred_at : min), past[0].occurred_at);
+      let [y, m] = first.split("-").map(Number);
+      const [ty, tm] = today.split("-").map(Number);
+      while (y < ty || (y === ty && m <= tm)) {
+        const isCurrent = y === ty && m === tm;
+        const lastDay = String(new Date(y, m, 0).getDate()).padStart(2, "0");
+        const end = isCurrent ? today : `${y}-${String(m).padStart(2, "0")}-${lastDay}`;
+        let v = 0;
+        for (const a of accounts) v += a.synced_balance != null ? a.synced_balance : a.initial_balance;
+        for (const t of past) {
+          const acc = t.account_id ? byId.get(t.account_id) : undefined;
+          if (acc && acc.synced_balance != null) { if (t.occurred_at > end) v -= signed(t); }
+          else if (t.occurred_at <= end) v += signed(t);
+        }
+        // O último ponto é sempre o saldo de hoje, para o gráfico terminar igual ao número grande.
+        series.push({
+          label: `${MONTHS_PT[m - 1].slice(0, 3)}/${String(y).slice(2)}`,
+          value: Math.round((isCurrent ? saldo : v) * 100) / 100,
+        });
+        m += 1;
+        if (m > 12) { m = 1; y += 1; }
+      }
+    }
+    return { saldo, banks: banks + unassigned, cards, series };
+  }, [accounts, txs, accountBalances]);
 
   // ── Visão geral: contas bancárias agrupadas por instituição ──
   const bankGroups = useMemo(() => {
@@ -365,9 +388,12 @@ function Dashboard() {
             <p className="text-4xl md:text-5xl font-semibold tabular-nums mt-1">
               {formatBRL(total.saldo)}
             </p>
+            <p className="text-xs text-primary-foreground/80 mt-1 tabular-nums">
+              Contas {formatBRL(total.banks)} · Cartões {formatBRL(total.cards)}
+            </p>
           </div>
           <span className="text-xs text-primary-foreground/70 max-w-[14rem] text-right">
-            Tudo que você ganhou menos tudo que gastou, somando todos os meses
+            O que você tem nas contas menos o que deve nos cartões
           </span>
         </div>
         {total.series.length > 1 && (
