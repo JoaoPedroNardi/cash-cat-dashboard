@@ -209,7 +209,6 @@ function AccountsPage() {
       {connectToken && PluggyConnectComp && (
         <PluggyConnectComp
           connectToken={connectToken}
-          includeSandbox
           onSuccess={handleConnectSuccess}
           onError={(err: any) => {
             console.error("Pluggy Connect error:", err);
