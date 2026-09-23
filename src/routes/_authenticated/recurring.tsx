@@ -99,7 +99,7 @@ function RecurringPage() {
 
   return (
     <div className="p-6 md:p-10 max-w-4xl mx-auto">
-      <header className="mb-8 flex items-end justify-between gap-4">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Recorrentes</h1>
           <p className="text-muted-foreground mt-1">Aluguel, salário, assinaturas — automáticos</p>
@@ -172,25 +172,29 @@ function RecurringPage() {
                 const c = getCategory(t.type, t.category);
                 const Icon = c.icon;
                 return (
-                  <li key={t.id} className="flex items-center gap-4 p-4">
-                    <div className="h-11 w-11 rounded-xl flex items-center justify-center"
+                  <li key={t.id} className="flex items-center gap-3 md:gap-4 p-3 md:p-4">
+                    <div className="h-10 w-10 md:h-11 md:w-11 shrink-0 rounded-xl flex items-center justify-center"
                       style={{ background: `color-mix(in oklab, ${c.color} 20%, transparent)`, color: c.color }}>
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{t.description || c.label}</p>
+                      <p className="font-medium line-clamp-2 break-words md:truncate">{t.description || c.label}</p>
                       <p className="text-xs text-muted-foreground">
                         {FREQ_LABEL[t.frequency]} • Próximo: {formatDateBR(t.next_run)}
                       </p>
                     </div>
-                    <span className={`font-semibold tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                    <div className="flex flex-col items-end gap-1 md:flex-row md:items-center md:gap-3 shrink-0">
+                    <span className={`font-semibold whitespace-nowrap tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
                       {t.type === "income" ? "+" : "−"}{formatBRL(t.amount)}
-                    </span>
+                    </span>                      <div className="flex items-center gap-1 md:gap-3">
+
                     <Switch checked={t.active} onCheckedChange={() => toggle(t)} />
                     <Button size="icon" variant="ghost" onClick={() => remove(t.id)}
-                      className="text-muted-foreground hover:text-destructive">
+                      className="h-8 w-8 md:h-10 md:w-10 text-muted-foreground hover:text-destructive">
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                      </div>
+                    </div>
                   </li>
                 );
               })}

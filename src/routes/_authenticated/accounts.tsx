@@ -269,7 +269,7 @@ function AccountsPage() {
               const syncKey = a.bank_connection_id ?? "";
               return (
                 <div key={a.id} className="bg-gradient-card border border-border rounded-2xl p-5 shadow-card group relative">
-                  <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                  <div className="absolute top-3 right-3 flex gap-1 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition">
                     {a.bank_connection_id && (
                       <button onClick={() => runSync({ connectionId: a.bank_connection_id! }, syncKey)}
                         disabled={syncingId !== null}

@@ -672,7 +672,7 @@ function Dashboard() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 mb-8">
+        <div className="grid grid-cols-1 gap-6 mb-8">
           {/* Ganhos vs Gastos — últimos 6 meses */}
           <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
             <h3 className="font-medium mb-4">Ganhos vs Gastos — últimos 6 meses</h3>

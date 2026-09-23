@@ -140,7 +140,7 @@ function InstallmentsPage() {
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-medium truncate">{p.description}</p>
                       <button onClick={() => removePlan(p.groupId, p.description)}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition shrink-0">
+                        className="md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 text-muted-foreground hover:text-destructive transition shrink-0">
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>

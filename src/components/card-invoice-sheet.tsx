@@ -90,7 +90,7 @@ export function CardInvoiceSheet({
 
         <div className="mt-6 flex items-center justify-between gap-2">
           <div>
-            <p className="text-sm font-medium capitalize">Fatura de {MONTHS_PT[month.getMonth()]} de {month.getFullYear()}</p>
+            <p className="text-sm font-medium">Fatura de {MONTHS_PT[month.getMonth()]} de {month.getFullYear()}</p>
             <p className="text-xs text-muted-foreground">{fmtDM(cycle.start)} a {fmtDM(cycle.end)}</p>
           </div>
           <div className="flex gap-1">

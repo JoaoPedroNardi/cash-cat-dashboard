@@ -1,14 +1,15 @@
 import { createFileRoute, Outlet, Link, Navigate, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePluggySync } from "@/hooks/use-pluggy-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, CreditCard, Repeat,
-  GitCompare, Upload, CalendarDays, Layers, LineChart,
+  GitCompare, Upload, CalendarDays, Layers, LineChart, Menu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { materializeRecurring } from "@/lib/recurring";
 
@@ -29,10 +30,14 @@ const navItems = [
   { to: "/recurring",        label: "Recorrentes",      icon: Repeat },
 ] as const;
 
+// No celular, só os itens principais ficam na barra; o resto vai para o menu "Mais".
+const mobilePrimary = ["/dashboard", "/transactions", "/add", "/accounts"] as const;
+
 function AuthLayout() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -71,6 +76,8 @@ function AuthLayout() {
     return () => document.removeEventListener("visibilitychange", onVisible);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  useEffect(() => { setMoreOpen(false); }, [pathname]);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -121,16 +128,22 @@ function AuthLayout() {
         </Button>
       </aside>
 
-      <div className="md:hidden fixed top-3 right-3 z-40">
+      <header className="md:hidden fixed top-0 inset-x-0 z-40 h-12 px-4 flex items-center justify-between bg-sidebar/95 backdrop-blur border-b border-sidebar-border">
+        <Link to="/dashboard" className="flex items-center gap-2">
+          <div className="h-7 w-7 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
+            <Wallet className="h-3.5 w-3.5 text-primary-foreground" />
+          </div>
+          <span className="font-semibold tracking-tight text-sidebar-foreground">Finança</span>
+        </Link>
         <ThemeToggle />
-      </div>
+      </header>
 
-      <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border flex justify-around p-2 overflow-x-auto">
-        {navItems.map((item) => {
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border grid grid-cols-5 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        {navItems.filter((i) => (mobilePrimary as readonly string[]).includes(i.to)).map((item) => {
           const active = pathname === item.to;
           return (
             <Link key={item.to} to={item.to}
-              className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded-md text-[10px] shrink-0 ${
+              className={`flex flex-col items-center gap-1 py-1.5 rounded-md text-[11px] ${
                 active ? "text-primary" : "text-sidebar-foreground/60"
               }`}
             >
@@ -139,9 +152,43 @@ function AuthLayout() {
             </Link>
           );
         })}
-      </div>
+        <button type="button" onClick={() => setMoreOpen(true)}
+          className={`flex flex-col items-center gap-1 py-1.5 rounded-md text-[11px] ${
+            !(mobilePrimary as readonly string[]).includes(pathname) ? "text-primary" : "text-sidebar-foreground/60"
+          }`}
+        >
+          <Menu className="h-5 w-5" />
+          Mais
+        </button>
+      </nav>
 
-      <main className="flex-1 pb-24 md:pb-0">
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="md:hidden rounded-t-2xl pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <SheetHeader>
+            <SheetTitle>Mais opções</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {navItems.filter((i) => !(mobilePrimary as readonly string[]).includes(i.to)).map((item) => {
+              const active = pathname === item.to;
+              return (
+                <Link key={item.to} to={item.to}
+                  className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center text-xs ${
+                    active ? "border-primary text-primary" : "border-border text-foreground"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+          <Button variant="outline" onClick={logout} className="mt-4 w-full">
+            <LogOut className="h-4 w-4 mr-2" /> Sair
+          </Button>
+        </SheetContent>
+      </Sheet>
+
+      <main className="flex-1 min-w-0 pt-12 pb-24 md:pt-0 md:pb-0">
         <Outlet />
       </main>
     </div>

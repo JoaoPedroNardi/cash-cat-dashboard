@@ -136,14 +136,14 @@ function TxList() {
       </header>
 
       {/* Filters */}
-      <div className="bg-gradient-card border border-border rounded-2xl p-4 shadow-card mb-4 grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto]">
-        <div className="relative">
+      <div className="bg-gradient-card border border-border rounded-2xl p-4 shadow-card mb-4 grid grid-cols-2 gap-3 md:grid-cols-[1fr_auto_auto_auto_auto]">
+        <div className="relative col-span-2 md:col-span-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input value={search.q} onChange={(e) => setS({ q: e.target.value })}
             placeholder="Buscar descrição..." className="pl-9" />
         </div>
         <Select value={search.kind} onValueChange={(v: any) => setS({ kind: v })}>
-          <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full md:w-[130px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="income">Ganhos</SelectItem>
@@ -151,14 +151,14 @@ function TxList() {
           </SelectContent>
         </Select>
         <Select value={search.cat || "__all"} onValueChange={(v) => setS({ cat: v === "__all" ? "" : v })}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
+          <SelectTrigger className="w-full md:w-[160px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all">Todas categorias</SelectItem>
             {allCats.map((c) => <SelectItem key={`${c.id}-${c.label}`} value={c.id}>{c.label}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={search.range} onValueChange={(v: any) => setS({ range: v })}>
-          <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-full md:w-[120px]"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="30">30 dias</SelectItem>
             <SelectItem value="90">90 dias</SelectItem>
@@ -176,18 +176,18 @@ function TxList() {
       </div>
 
       {/* Totals */}
-      <div className="grid grid-cols-3 gap-3 mb-4 text-sm">
-        <div className="rounded-xl border border-border bg-card p-3">
+      <div className="grid grid-cols-3 gap-2 md:gap-3 mb-4 text-sm">
+        <div className="rounded-xl border border-border bg-card p-2.5 md:p-3">
           <p className="text-xs text-muted-foreground">Ganhos</p>
-          <p className="font-semibold tabular-nums text-[color:var(--success)]">{formatBRL(totals.inc)}</p>
+          <p className="font-semibold whitespace-nowrap text-[13px] md:text-sm tabular-nums text-[color:var(--success)]">{formatBRL(totals.inc)}</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-3">
+        <div className="rounded-xl border border-border bg-card p-2.5 md:p-3">
           <p className="text-xs text-muted-foreground">Gastos</p>
-          <p className="font-semibold tabular-nums text-[color:var(--destructive)]">{formatBRL(totals.exp)}</p>
+          <p className="font-semibold whitespace-nowrap text-[13px] md:text-sm tabular-nums text-[color:var(--destructive)]">{formatBRL(totals.exp)}</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-3">
+        <div className="rounded-xl border border-border bg-card p-2.5 md:p-3">
           <p className="text-xs text-muted-foreground">Saldo</p>
-          <p className="font-semibold tabular-nums">{formatBRL(totals.balance)}</p>
+          <p className="font-semibold whitespace-nowrap text-[13px] md:text-sm tabular-nums">{formatBRL(totals.balance)}</p>
         </div>
       </div>
 
@@ -204,29 +204,33 @@ function TxList() {
               const c = getCategory(t.type, t.category);
               const Icon = c.icon;
               return (
-                <li key={t.id} className="flex items-center gap-4 p-4 group hover:bg-secondary/30">
-                  <div className="h-11 w-11 rounded-xl flex items-center justify-center"
+                <li key={t.id} className="flex items-center gap-3 md:gap-4 p-3 md:p-4 group hover:bg-secondary/30">
+                  <div className="h-10 w-10 md:h-11 md:w-11 shrink-0 rounded-xl flex items-center justify-center"
                     style={{ background: `color-mix(in oklab, ${c.color} 20%, transparent)`, color: c.color }}>
                     <Icon className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{t.description || c.label}</p>
+                    <p className="font-medium line-clamp-2 break-words md:truncate">{t.description || c.label}</p>
                     <p className="text-xs text-muted-foreground">
                       {c.label} • {formatDateBR(t.occurred_at)}
                       {t.ignore_in_totals && <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5">não conta em ganhos/gastos</span>}
                     </p>
                   </div>
-                  <span className={`font-semibold ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                  <div className="flex flex-col items-end md:flex-row md:items-center md:gap-2 shrink-0">
+                  <span className={`font-semibold whitespace-nowrap tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
                     {t.type === "income" ? "+" : "−"}{formatBRL(t.amount)}
                   </span>
-                  <Button size="icon" variant="ghost" onClick={() => setEditing(t)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-primary">
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" variant="ghost" onClick={() => remove(t)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center">
+                    <Button size="icon" variant="ghost" onClick={() => setEditing(t)}
+                      className="h-8 w-8 md:h-10 md:w-10 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-primary">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => remove(t)}
+                      className="h-8 w-8 md:h-10 md:w-10 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  </div>
                 </li>
               );
             })}
