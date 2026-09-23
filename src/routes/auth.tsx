@@ -15,7 +15,6 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,18 +25,8 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-        });
-        if (error) throw error;
-        toast.success("Conta criada! Entrando...");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       navigate({ to: "/dashboard" });
     } catch (err: any) {
       toast.error(err.message ?? "Erro na autenticação");
@@ -57,12 +46,8 @@ function AuthPage() {
         </Link>
 
         <div className="bg-gradient-card border border-border rounded-2xl p-8 shadow-card">
-          <h1 className="text-2xl font-semibold mb-1">
-            {mode === "signin" ? "Bem-vindo de volta" : "Criar sua conta"}
-          </h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            {mode === "signin" ? "Entre para acessar seu painel" : "Comece a organizar suas finanças"}
-          </p>
+          <h1 className="text-2xl font-semibold mb-1">Bem-vindo de volta</h1>
+          <p className="text-sm text-muted-foreground mb-6">Entre para acessar seu painel</p>
 
           <form onSubmit={submit} className="space-y-4">
             <div className="space-y-2">
@@ -76,17 +61,9 @@ function AuthPage() {
                 value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
             </div>
             <Button type="submit" disabled={loading} className="w-full bg-gradient-primary text-primary-foreground hover:opacity-90 shadow-glow">
-              {loading ? "Aguarde..." : mode === "signin" ? "Entrar" : "Criar conta"}
+              {loading ? "Aguarde..." : "Entrar"}
             </Button>
           </form>
-
-          <button
-            type="button"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="w-full mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {mode === "signin" ? "Não tem conta? Cadastre-se" : "Já tem conta? Entrar"}
-          </button>
         </div>
       </div>
     </div>
