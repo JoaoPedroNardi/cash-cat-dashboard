@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { authenticateWithToken } from '@/integrations/supabase/server-auth';
 import { createConnectToken, getItem, listAccounts, listTransactions } from './client.server';
 
+// Códigos de banco (BACEN) que conseguimos reconhecer pelo transferNumber. Como o conector
+// MeuPluggy não informa a instituição de origem, este é o único sinal disponível.
+const BANK_CODE_NAMES: Record<string, string> = { '260': 'Nubank', '348': 'XP' };
+
+function bankNameFromTransferNumber(transferNumber?: string | null): string | null {
+  const code = transferNumber?.split('/')[0];
+  return (code && BANK_CODE_NAMES[code]) || null;
+}
+
 const getConnectTokenSchema = z.object({
   accessToken: z.string(),
   oauthRedirectUri: z.string().optional(),
@@ -70,7 +79,16 @@ export const syncItem = createServerFn({ method: 'POST' })
     let accountsSynced = 0;
     let transactionsInserted = 0;
 
+    // Cartões não trazem bankData; herdam a instituição das contas do mesmo item.
+    const itemInstitution =
+      pluggyAccounts.map((a) => bankNameFromTransferNumber(a.bankData?.transferNumber)).find(Boolean) ?? null;
+
     for (const pAccount of pluggyAccounts) {
+      // Convenção do app: negativo = devendo. Na Pluggy, o saldo do cartão é o valor da fatura (positivo).
+      const syncedBalance = pAccount.type === 'CREDIT' ? -pAccount.balance : pAccount.balance;
+      const creditLimit = pAccount.creditData?.creditLimit ?? null;
+      const mask = (pAccount.number ?? '').replace(/\D/g, '').slice(-4) || null;
+
       const { data: existingAccount } = await supabase
         .from('accounts')
         .select('id')
@@ -79,7 +97,14 @@ export const syncItem = createServerFn({ method: 'POST' })
 
       let localAccountId = existingAccount?.id;
 
-      if (!localAccountId) {
+      if (localAccountId) {
+        // institution_name não é sobrescrito: o usuário pode ter renomeado (ex: "Clear Corretora").
+        const { error } = await supabase
+          .from('accounts')
+          .update({ synced_balance: syncedBalance, credit_limit: creditLimit, account_mask: mask })
+          .eq('id', localAccountId);
+        if (error) throw new Error(error.message);
+      } else {
         const { data: created, error } = await supabase
           .from('accounts')
           .insert({
@@ -87,7 +112,10 @@ export const syncItem = createServerFn({ method: 'POST' })
             name: pAccount.name,
             type: pAccount.type === 'CREDIT' ? 'credit' : 'checking',
             initial_balance: 0,
-            credit_limit: pAccount.creditData?.creditLimit ?? null,
+            synced_balance: syncedBalance,
+            credit_limit: creditLimit,
+            account_mask: mask,
+            institution_name: bankNameFromTransferNumber(pAccount.bankData?.transferNumber) ?? itemInstitution,
             pluggy_account_id: pAccount.id,
             bank_connection_id: connectionId,
           })

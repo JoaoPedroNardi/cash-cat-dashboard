@@ -34,13 +34,16 @@ interface Account {
   color: string;
   initial_balance: number;
   credit_limit: number | null;
+  synced_balance: number | null;
+  institution_name: string | null;
+  account_mask: string | null;
   pluggy_account_id: string | null;
   bank_connection_id: string | null;
 }
 
-type FormState = { name: string; type: string; initial: string; creditLimit: string; color: string };
+type FormState = { name: string; type: string; initial: string; creditLimit: string; institution: string; color: string };
 
-const emptyForm: FormState = { name: "", type: "checking", initial: "0", creditLimit: "", color: PALETTE[0] };
+const emptyForm: FormState = { name: "", type: "checking", initial: "0", creditLimit: "", institution: "", color: PALETTE[0] };
 
 function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -76,7 +79,8 @@ function AccountsPage() {
     const list = (accs ?? []).map((a: any) => ({
       ...a,
       initial_balance: Number(a.initial_balance),
-      credit_limit: a.credit_limit === null ? null : Number(a.credit_limit),
+      credit_limit: a.credit_limit == null ? null : Number(a.credit_limit),
+      synced_balance: a.synced_balance == null ? null : Number(a.synced_balance),
     }));
     setAccounts(list);
     const bal: Record<string, number> = {};
@@ -86,6 +90,9 @@ function AccountsPage() {
       const v = Number(t.amount) * (t.type === "income" ? 1 : -1);
       bal[t.account_id] = (bal[t.account_id] ?? 0) + v;
     });
+    // Contas sincronizadas usam o saldo que o banco informou, não a soma das transações
+    // (o histórico importado é parcial, então a soma não bate com o saldo real).
+    list.forEach((a) => { if (a.synced_balance != null) bal[a.id] = a.synced_balance; });
     setBalances(bal);
     setLoading(false);
   };
@@ -104,6 +111,7 @@ function AccountsPage() {
       user_id: u.user.id, name: form.name.trim(), type: form.type as any, color: form.color,
       initial_balance: parseFloat(form.initial.replace(",", ".")) || 0,
       credit_limit: form.type === "credit" ? (parseFloat(form.creditLimit.replace(",", ".")) || null) : null,
+      institution_name: form.institution.trim() || null,
     });
     if (error) { toast.error(error.message); return; }
     toast.success("Conta criada");
@@ -114,7 +122,8 @@ function AccountsPage() {
   const openEdit = (a: Account) => {
     setEditForm({
       name: a.name, type: a.type, initial: String(a.initial_balance),
-      creditLimit: a.credit_limit != null ? String(a.credit_limit) : "", color: a.color,
+      creditLimit: a.credit_limit != null ? String(a.credit_limit) : "",
+      institution: a.institution_name ?? "", color: a.color,
     });
     setEditing(a);
   };
@@ -125,6 +134,7 @@ function AccountsPage() {
       name: editForm.name.trim(), type: editForm.type as any, color: editForm.color,
       initial_balance: parseFloat(editForm.initial.replace(",", ".")) || 0,
       credit_limit: editForm.type === "credit" ? (parseFloat(editForm.creditLimit.replace(",", ".")) || null) : null,
+      institution_name: editForm.institution.trim() || null,
     }).eq("id", editing.id);
     if (error) { toast.error(error.message); return; }
     toast.success("Conta atualizada");
@@ -267,7 +277,9 @@ function AccountsPage() {
                     <div>
                       <p className="font-medium">{a.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {TYPE_LABEL[a.type]}{a.bank_connection_id ? " · sincronizado via Pluggy" : ""}
+                        {a.institution_name ? `${a.institution_name} · ` : ""}{TYPE_LABEL[a.type]}
+                        {a.account_mask ? ` · final ${a.account_mask}` : ""}
+                        {a.bank_connection_id ? " · sincronizado" : ""}
                       </p>
                     </div>
                   </div>
@@ -294,6 +306,10 @@ function AccountForm({ form, setForm }: { form: FormState; setForm: (f: FormStat
     <div className="space-y-4">
       <div className="space-y-2"><Label>Nome</Label>
         <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nubank" />
+      </div>
+      <div className="space-y-2"><Label>Instituição (agrupa contas no painel)</Label>
+        <Input value={form.institution} onChange={(e) => setForm({ ...form, institution: e.target.value })}
+          placeholder="Ex: Nubank, XP, Clear Corretora" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2"><Label>Tipo</Label>

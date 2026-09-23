@@ -7,7 +7,7 @@ import { tooltipStyle } from "@/lib/tooltip-style";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
   Lightbulb, AlertTriangle, Sparkles, TrendingDown, ChevronLeft, ChevronRight,
-  Repeat, ArrowRight, Coins, Landmark, CreditCard, LineChart, Clock,
+  Repeat, ArrowRight, Coins, Landmark, CreditCard, LineChart, Clock, ChevronDown,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -39,7 +39,9 @@ interface Account {
   color: string;
   initial_balance: number;
   credit_limit: number | null;
-  bank_connections: { institution_name: string | null } | null;
+  synced_balance: number | null;
+  institution_name: string | null;
+  account_mask: string | null;
 }
 
 const MONTHS_PT = [
@@ -85,7 +87,7 @@ function Dashboard() {
           .from("transactions")
           .select("id,type,amount,category,description,occurred_at,account_id")
           .order("occurred_at", { ascending: false }),
-        supabase.from("accounts").select("*, bank_connections(institution_name)").order("created_at", { ascending: true }),
+        supabase.from("accounts").select("*").order("created_at", { ascending: true }),
         supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
       ]);
 
@@ -93,7 +95,8 @@ function Dashboard() {
       setAccounts((a.data ?? []).map((x: any) => ({
         ...x,
         initial_balance: Number(x.initial_balance),
-        credit_limit: x.credit_limit === null ? null : Number(x.credit_limit),
+        credit_limit: x.credit_limit == null ? null : Number(x.credit_limit),
+        synced_balance: x.synced_balance == null ? null : Number(x.synced_balance),
       })));
       setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
       setLoading(false);
@@ -129,26 +132,35 @@ function Dashboard() {
       if (!t.account_id || !map.has(t.account_id)) continue;
       map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
     }
+    // Contas sincronizadas usam o saldo informado pelo banco (a soma das transações é parcial).
+    for (const a of accounts) if (a.synced_balance != null) map.set(a.id, a.synced_balance);
     return map;
   }, [accounts, txs]);
 
   // ── Visão geral: contas bancárias agrupadas por instituição ──
   const bankGroups = useMemo(() => {
     const nonCredit = accounts.filter((a) => a.type !== "credit");
-    const groups = new Map<string, { name: string; count: number; total: number }>();
+    const groups = new Map<string, { name: string; total: number; accounts: { id: string; name: string; balance: number; mask: string | null }[] }>();
     let grandTotal = 0;
     for (const a of nonCredit) {
-      const key = a.bank_connections?.institution_name ?? a.name;
+      const key = a.institution_name ?? a.name;
       const bal = accountBalances.get(a.id) ?? a.initial_balance;
-      const g = groups.get(key) ?? { name: key, count: 0, total: 0 };
-      g.count += 1;
+      const g = groups.get(key) ?? { name: key, total: 0, accounts: [] };
       g.total += bal;
+      g.accounts.push({ id: a.id, name: a.name, balance: bal, mask: a.account_mask });
       groups.set(key, g);
       grandTotal += bal;
     }
     const list = Array.from(groups.values()).sort((a, b) => b.total - a.total);
     return { total: grandTotal, groups: list };
   }, [accounts, accountBalances]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (name: string) =>
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
 
   // ── Visão geral: cartões de crédito ──
   const creditSummary = useMemo(() => {
@@ -158,7 +170,7 @@ function Dashboard() {
       const bal = accountBalances.get(a.id) ?? a.initial_balance;
       owed += Math.max(0, -bal);
       if (a.credit_limit) limit += a.credit_limit;
-      return { id: a.id, name: a.name, balance: bal };
+      return { id: a.id, name: a.name, balance: bal, mask: a.account_mask };
     }).sort((a, b) => a.balance - b.balance);
     const pctUsed = limit > 0 ? Math.min(100, (owed / limit) * 100) : null;
     return { owed, limit, pctUsed, items };
@@ -267,16 +279,39 @@ function Dashboard() {
           {bankGroups.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground py-2">Nenhuma conta ainda.</p>
           ) : (
-            <ul className="space-y-2.5 mt-3">
+            <ul className="mt-3 divide-y divide-border">
               {bankGroups.groups.map((g) => {
                 const pct = bankGroups.total !== 0 ? (g.total / bankGroups.total) * 100 : 0;
+                const open = expandedGroups.has(g.name);
                 return (
-                  <li key={g.name} className="flex items-center justify-between text-sm">
-                    <span className="truncate">
-                      <span className="block truncate">{g.name}</span>
-                      <span className="text-xs text-muted-foreground">{g.count} conta{g.count > 1 ? "s" : ""} · {pct.toFixed(1)}%</span>
-                    </span>
-                    <span className="font-medium tabular-nums shrink-0 ml-2">{formatBRL(g.total)}</span>
+                  <li key={g.name} className="py-2.5">
+                    <button type="button" onClick={() => toggleGroup(g.name)}
+                      className="w-full flex items-center justify-between text-sm text-left">
+                      <span className="truncate">
+                        <span className="block truncate">{g.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {g.accounts.length} conta{g.accounts.length > 1 ? "s" : ""} · {pct.toFixed(1)}%
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-2 shrink-0 ml-2">
+                        <span className={`font-medium tabular-nums ${g.total < 0 ? "text-[color:var(--destructive)]" : "text-[color:var(--success)]"}`}>
+                          {formatBRL(g.total)}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+                      </span>
+                    </button>
+                    {open && (
+                      <ul className="mt-2 space-y-1.5 pl-3 border-l border-border">
+                        {g.accounts.map((acc) => (
+                          <li key={acc.id} className="flex items-center justify-between text-xs">
+                            <span className="truncate text-muted-foreground">
+                              {acc.name}{acc.mask ? ` · final ${acc.mask}` : ""}
+                            </span>
+                            <span className="tabular-nums shrink-0 ml-2">{formatBRL(acc.balance)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 );
               })}
@@ -302,8 +337,11 @@ function Dashboard() {
             <ul className="space-y-2.5">
               {creditSummary.items.map((c) => (
                 <li key={c.id} className="flex items-center justify-between text-sm">
-                  <span className="truncate">{c.name}</span>
-                  <span className="font-medium tabular-nums text-[color:var(--destructive)] shrink-0 ml-2">{formatBRL(c.balance)}</span>
+                  <span className="truncate">
+                    <span className="block truncate">{c.name}</span>
+                    {c.mask && <span className="text-xs text-muted-foreground">xxxx {c.mask}</span>}
+                  </span>
+                  <span className="font-medium tabular-nums text-[color:var(--destructive)] shrink-0 ml-2">{formatBRL(Math.max(0, -c.balance))}</span>
                 </li>
               ))}
             </ul>

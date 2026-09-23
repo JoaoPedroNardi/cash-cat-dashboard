@@ -89,6 +89,14 @@ alter table public.accounts add column if not exists credit_limit numeric;
 alter table public.accounts add column if not exists pluggy_account_id text unique;
 alter table public.accounts add column if not exists bank_connection_id uuid references public.bank_connections(id) on delete set null;
 
+-- Saldo informado pelo banco na última sincronização, já na convenção do app
+-- (negativo = devendo, ex: cartão). Quando preenchido, substitui a soma das transações.
+alter table public.accounts add column if not exists synced_balance numeric;
+-- Instituição usada para agrupar contas no dashboard (ex: "Nubank", "XP"). Editável.
+alter table public.accounts add column if not exists institution_name text;
+-- Últimos dígitos da conta/cartão, só para exibição.
+alter table public.accounts add column if not exists account_mask text;
+
 -- Chave de deduplicação: re-sincronizar nunca insere a mesma transação duas vezes
 alter table public.transactions add column if not exists pluggy_transaction_id text unique;
 

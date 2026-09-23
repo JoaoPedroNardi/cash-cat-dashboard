@@ -10,7 +10,12 @@ export interface PluggyAccount {
   type: "BANK" | "CREDIT";
   subtype: string;
   name: string;
+  number?: string | null;
   balance: number;
+  bankData?: {
+    // "banco/agência/conta", ex: "260/0001/12345678-9" (260 = Nubank, 348 = XP)
+    transferNumber?: string | null;
+  } | null;
   creditData?: {
     creditLimit?: number;
     availableCreditLimit?: number;
