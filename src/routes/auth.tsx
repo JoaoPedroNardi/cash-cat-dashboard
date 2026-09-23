@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Wallet } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -37,6 +38,7 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
+      <ThemeToggle className="fixed top-4 right-4" />
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 justify-center mb-8">
           <div className="h-10 w-10 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">

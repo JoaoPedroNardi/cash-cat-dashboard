@@ -89,7 +89,7 @@ function AuthLayout() {
 
   return (
     <div className="min-h-screen flex">
-      <aside className="hidden md:flex w-60 flex-col border-r border-sidebar-border bg-sidebar p-5">
+      <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-5 sticky top-0 h-screen overflow-y-auto">
         <Link to="/dashboard" className="flex items-center gap-2 mb-8">
           <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center shadow-glow">
             <Wallet className="h-4 w-4 text-primary-foreground" />
