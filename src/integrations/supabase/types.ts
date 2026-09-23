@@ -16,35 +16,85 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
+          bank_connection_id: string | null
           color: string
           created_at: string
+          credit_limit: number | null
           icon: string
           id: string
           initial_balance: number
           name: string
+          pluggy_account_id: string | null
           type: Database["public"]["Enums"]["account_type"]
           updated_at: string
           user_id: string
         }
         Insert: {
+          bank_connection_id?: string | null
           color?: string
           created_at?: string
+          credit_limit?: number | null
           icon?: string
           id?: string
           initial_balance?: number
           name: string
+          pluggy_account_id?: string | null
           type?: Database["public"]["Enums"]["account_type"]
           updated_at?: string
           user_id: string
         }
         Update: {
+          bank_connection_id?: string | null
           color?: string
           created_at?: string
+          credit_limit?: number | null
           icon?: string
           id?: string
           initial_balance?: number
           name?: string
+          pluggy_account_id?: string | null
           type?: Database["public"]["Enums"]["account_type"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounts_bank_connection_id_fkey"
+            columns: ["bank_connection_id"]
+            isOneToOne: false
+            referencedRelation: "bank_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_connections: {
+        Row: {
+          created_at: string
+          id: string
+          institution_name: string | null
+          last_synced_at: string | null
+          pluggy_item_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          institution_name?: string | null
+          last_synced_at?: string | null
+          pluggy_item_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          institution_name?: string | null
+          last_synced_at?: string | null
+          pluggy_item_id?: string
+          status?: string
           updated_at?: string
           user_id?: string
         }
@@ -187,6 +237,7 @@ export type Database = {
           installment_number: number | null
           installment_total: number | null
           occurred_at: string
+          pluggy_transaction_id: string | null
           recurring_transaction_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
@@ -202,6 +253,7 @@ export type Database = {
           installment_number?: number | null
           installment_total?: number | null
           occurred_at?: string
+          pluggy_transaction_id?: string | null
           recurring_transaction_id?: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
@@ -217,6 +269,7 @@ export type Database = {
           installment_number?: number | null
           installment_total?: number | null
           occurred_at?: string
+          pluggy_transaction_id?: string | null
           recurring_transaction_id?: string | null
           type?: Database["public"]["Enums"]["transaction_type"]
           user_id?: string
