@@ -30,6 +30,7 @@ interface Tx {
   description: string | null;
   occurred_at: string;
   account_id: string | null;
+  ignore_in_totals: boolean;
 }
 
 interface Account {
@@ -85,7 +86,7 @@ function Dashboard() {
       const [tx, a, r] = await Promise.all([
         supabase
           .from("transactions")
-          .select("id,type,amount,category,description,occurred_at,account_id")
+          .select("id,type,amount,category,description,occurred_at,account_id,ignore_in_totals")
           .order("occurred_at", { ascending: false }),
         supabase.from("accounts").select("*").order("created_at", { ascending: true }),
         supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
@@ -205,12 +206,15 @@ function Dashboard() {
     const prevMk = monthKey(subMonths(month, 1));
     const monthTxs = txs.filter((t) => billingMonthKey(t.occurred_at, closingDay) === mk);
 
+    // Pagamento de fatura, transferência entre contas próprias e investimentos não são ganho/gasto.
+    const counted = monthTxs.filter((t) => !t.ignore_in_totals);
     let inc = 0, exp = 0, prevInc = 0, prevExp = 0;
-    for (const t of monthTxs) {
+    for (const t of counted) {
       if (t.type === "income") inc += t.amount;
       else exp += t.amount;
     }
     for (const t of txs) {
+      if (t.ignore_in_totals) continue;
       if (billingMonthKey(t.occurred_at, closingDay) !== prevMk) continue;
       if (t.type === "income") prevInc += t.amount;
       else prevExp += t.amount;
@@ -222,7 +226,7 @@ function Dashboard() {
       ? Math.round(((available - prevAvailable) / Math.abs(prevAvailable)) * 100)
       : null;
 
-    const byCat = groupByCategory(monthTxs.filter((t) => t.type === "expense"));
+    const byCat = groupByCategory(counted.filter((t) => t.type === "expense"));
 
     // Insights do mês
     type Insight = { kind: "good" | "warn" | "info"; icon: any; text: string };
@@ -249,7 +253,7 @@ function Dashboard() {
   // ── Despesas futuras: gastos com data ainda não chegada (ex: parcelas futuras) ──
   const futureExpenses = useMemo(() => {
     const today = todayYMD();
-    const future = txs.filter((t) => t.type === "expense" && t.occurred_at > today);
+    const future = txs.filter((t) => t.type === "expense" && !t.ignore_in_totals && t.occurred_at > today);
     const total = future.reduce((s, t) => s + t.amount, 0);
     return { total, byCat: groupByCategory(future), count: future.length };
   }, [txs]);
@@ -258,6 +262,7 @@ function Dashboard() {
   const last6 = useMemo(() => {
     const acc = new Map<string, { income: number; expense: number }>();
     for (const t of txs) {
+      if (t.ignore_in_totals) continue;
       const mk = billingMonthKey(t.occurred_at, closingDay);
       const cur = acc.get(mk) ?? { income: 0, expense: 0 };
       cur[t.type] += t.amount;
@@ -597,7 +602,7 @@ function Dashboard() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{t.description || c.label}</p>
                       <p className="text-xs text-muted-foreground">
-                        {c.label} • {new Date(t.occurred_at + "T00:00:00").toLocaleDateString("pt-BR")}
+                        {c.label}{t.ignore_in_totals ? " (interno, não conta)" : ""} • {new Date(t.occurred_at + "T00:00:00").toLocaleDateString("pt-BR")}
                       </p>
                     </div>
                     <span className={`font-semibold tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>

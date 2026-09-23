@@ -33,9 +33,12 @@ function ComparePage() {
     (async () => {
       const { data } = await supabase
         .from("transactions")
-        .select("type,amount,category,occurred_at")
+        .select("type,amount,category,occurred_at,ignore_in_totals")
         .order("occurred_at", { ascending: false });
-      const list = (data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) }));
+      // Pagamento de fatura, transferência entre contas próprias e investimentos não entram na comparação.
+      const list = (data ?? [])
+        .filter((t: any) => !t.ignore_in_totals)
+        .map((t: any) => ({ ...t, amount: Number(t.amount) }));
       setTxs(list);
       const months = Array.from(new Set(list.map((t) => billingMonthKey(t.occurred_at, closingDay)))).sort().reverse();
       const now = billingMonthKey(todayYMD(), closingDay);

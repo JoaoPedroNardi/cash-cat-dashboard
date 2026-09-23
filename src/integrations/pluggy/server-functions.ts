@@ -152,6 +152,20 @@ const transactionsPageSchema = z.object({
   after: z.string().max(500).optional(),
 });
 
+// Categorias da Pluggy que são movimentação interna, não ganho nem gasto de verdade.
+const INTERNAL_CATEGORIES = new Set([
+  'Credit card payment', // pagamento/parcelamento de fatura
+  'Same person transfer', // transferência entre contas do próprio titular
+  'Transfer - Internal',
+  'Investments', // aplicação e resgate (RDB, etc.)
+]);
+// A XP classifica o pagamento de fatura como "Transfers" genérico; a descrição entrega.
+const CARD_BILL_PAYMENT = /pagamento\s+(de|da)\s+fatura/i;
+
+function isInternalMovement(category: string | null, description: string | null): boolean {
+  return INTERNAL_CATEGORIES.has(category ?? '') || CARD_BILL_PAYMENT.test(description ?? '');
+}
+
 /** Uma página (até 500) de transações de uma conta sincronizada, já no formato do app. */
 export const getTransactionsPage = createServerFn({ method: 'POST' })
   .inputValidator((data: unknown) => transactionsPageSchema.parse(data))
@@ -178,6 +192,7 @@ export const getTransactionsPage = createServerFn({ method: 'POST' })
         amount: Math.abs(t.amount),
         description: t.description || null,
         date: t.date.slice(0, 10),
+        ignoreInTotals: isInternalMovement(t.category, t.description),
       }));
 
     return { rows, cursor: page.cursor };

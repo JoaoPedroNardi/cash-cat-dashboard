@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Trash2, Pencil, Search, X } from "lucide-react";
@@ -37,6 +38,7 @@ interface Tx {
   occurred_at: string;
   account_id: string | null;
   installment_group_id: string | null;
+  ignore_in_totals: boolean;
 }
 
 function TxList() {
@@ -53,7 +55,7 @@ function TxList() {
     setLoading(true);
     const { data } = await supabase
       .from("transactions")
-      .select("id,type,amount,category,description,occurred_at,account_id,installment_group_id")
+      .select("id,type,amount,category,description,occurred_at,account_id,installment_group_id,ignore_in_totals")
       .order("occurred_at", { ascending: false });
     setTxs((data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
     setLoading(false);
@@ -79,7 +81,10 @@ function TxList() {
 
   const totals = useMemo(() => {
     let inc = 0, exp = 0;
-    filtered.forEach((t) => { if (t.type === "income") inc += t.amount; else exp += t.amount; });
+    filtered.forEach((t) => {
+      if (t.ignore_in_totals) return;
+      if (t.type === "income") inc += t.amount; else exp += t.amount;
+    });
     return { inc, exp, balance: inc - exp };
   }, [filtered]);
 
@@ -203,6 +208,7 @@ function TxList() {
                     <p className="font-medium truncate">{t.description || c.label}</p>
                     <p className="text-xs text-muted-foreground">
                       {c.label} • {formatDateBR(t.occurred_at)}
+                      {t.ignore_in_totals && <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5">não conta em ganhos/gastos</span>}
                     </p>
                   </div>
                   <span className={`font-semibold ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
@@ -236,6 +242,7 @@ function EditSheet({ tx, onClose, onSaved }: { tx: Tx | null; onClose: () => voi
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
+  const [ignore, setIgnore] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -244,6 +251,7 @@ function EditSheet({ tx, onClose, onSaved }: { tx: Tx | null; onClose: () => voi
     setCategory(tx.category);
     setDescription(tx.description ?? "");
     setDate(tx.occurred_at);
+    setIgnore(tx.ignore_in_totals);
   }, [tx]);
 
   if (!tx) return null;
@@ -253,7 +261,7 @@ function EditSheet({ tx, onClose, onSaved }: { tx: Tx | null; onClose: () => voi
     const v = parseFloat(amount.replace(",", "."));
     if (!v || v <= 0) { toast.error("Valor inválido"); return; }
     setSaving(true);
-    const patch = { amount: v, category, description: description.trim() || null, occurred_at: date };
+    const patch = { amount: v, category, description: description.trim() || null, occurred_at: date, ignore_in_totals: ignore };
     const { error } = await supabase.from("transactions").update(patch).eq("id", tx.id);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
@@ -282,6 +290,15 @@ function EditSheet({ tx, onClose, onSaved }: { tx: Tx | null; onClose: () => voi
           </div>
           <div className="space-y-2"><Label>Descrição</Label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div>
+              <Label htmlFor="ignore-totals" className="cursor-pointer">Não contar em ganhos e gastos</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Para pagamento de fatura, transferência entre suas contas ou investimento. Continua valendo no saldo da conta.
+              </p>
+            </div>
+            <Switch id="ignore-totals" checked={ignore} onCheckedChange={setIgnore} />
           </div>
         </div>
         <SheetFooter className="mt-6">

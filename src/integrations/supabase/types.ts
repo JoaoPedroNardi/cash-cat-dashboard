@@ -242,6 +242,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          ignore_in_totals: boolean
           installment_group_id: string | null
           installment_number: number | null
           installment_total: number | null
@@ -258,6 +259,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          ignore_in_totals?: boolean
           installment_group_id?: string | null
           installment_number?: number | null
           installment_total?: number | null
@@ -274,6 +276,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          ignore_in_totals?: boolean
           installment_group_id?: string | null
           installment_number?: number | null
           installment_total?: number | null

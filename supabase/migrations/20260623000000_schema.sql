@@ -97,6 +97,11 @@ alter table public.accounts add column if not exists institution_name text;
 -- Últimos dígitos da conta/cartão, só para exibição.
 alter table public.accounts add column if not exists account_mask text;
 
+-- Movimentações que não são ganho nem gasto de verdade (pagamento de fatura, transferência entre
+-- contas próprias, aplicação/resgate de investimento). Continuam contando no saldo das contas,
+-- mas ficam fora dos totais de ganhos/gastos, categorias e comparativos.
+alter table public.transactions add column if not exists ignore_in_totals boolean not null default false;
+
 -- Chave de deduplicação: re-sincronizar nunca insere a mesma transação duas vezes
 alter table public.transactions add column if not exists pluggy_transaction_id text unique;
 

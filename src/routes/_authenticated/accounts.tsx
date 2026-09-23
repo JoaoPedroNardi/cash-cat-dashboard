@@ -187,6 +187,7 @@ function AccountsPage() {
       for (const acc of sync.accounts) {
         let after: string | undefined;
         let seen = 0;
+        const fullImport = acc.isNew || !sync.since;
         do {
           toast.loading(`Importando ${acc.name}${seen ? ` (${seen} transações)` : ""}...`, { id: toastId });
           const page = await callGetTransactionsPage({
@@ -210,11 +211,24 @@ function AccountsPage() {
                 occurred_at: r.date,
                 account_id: acc.localId,
                 pluggy_transaction_id: r.id,
+                ignore_in_totals: r.ignoreInTotals,
               })),
               { onConflict: "pluggy_transaction_id", ignoreDuplicates: true, count: "exact" },
             );
             if (error) throw new Error(error.message);
             inserted += count ?? 0;
+
+            // Só em importação completa: marca as internas também nas já existentes (só esse campo,
+            // preservando categoria/descrição editadas). Nas incrementais não mexe, pra não desfazer
+            // um ajuste manual seu. Em blocos pra não estourar o tamanho da URL.
+            const internalIds = fullImport ? page.rows.filter((r) => r.ignoreInTotals).map((r) => r.id) : [];
+            for (let i = 0; i < internalIds.length; i += 80) {
+              const { error: markError } = await supabase
+                .from("transactions")
+                .update({ ignore_in_totals: true })
+                .in("pluggy_transaction_id", internalIds.slice(i, i + 80));
+              if (markError) throw new Error(markError.message);
+            }
           }
           seen += page.rows.length;
           after = page.cursor ?? undefined;
