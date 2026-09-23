@@ -7,11 +7,11 @@ import { tooltipStyle } from "@/lib/tooltip-style";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
   Lightbulb, AlertTriangle, Sparkles, TrendingDown, ChevronLeft, ChevronRight,
-  CreditCard, Repeat, ArrowRight, Coins,
+  Repeat, ArrowRight, Coins, Landmark, CreditCard, LineChart, Clock,
 } from "lucide-react";
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  AreaChart, Area, Legend,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  AreaChart, Area, Legend, Tooltip,
 } from "recharts";
 import { todayYMD } from "@/lib/utils";
 import { billingMonthKey, billingCycleRange } from "@/lib/billing";
@@ -32,6 +32,16 @@ interface Tx {
   account_id: string | null;
 }
 
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  color: string;
+  initial_balance: number;
+  credit_limit: number | null;
+  bank_connections: { institution_name: string | null } | null;
+}
+
 const MONTHS_PT = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
@@ -42,9 +52,21 @@ function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** Agrupa transações de gasto por categoria, ordenado do maior pro menor. */
+function groupByCategory(txs: Tx[]) {
+  const cats = new Map<string, number>();
+  for (const t of txs) cats.set(t.category, (cats.get(t.category) ?? 0) + t.amount);
+  return Array.from(cats.entries())
+    .map(([id, value]) => {
+      const c = getCategory("expense", id);
+      return { id, name: c.label, value, color: c.color };
+    })
+    .sort((a, b) => b.value - a.value);
+}
+
 function Dashboard() {
   const [txs, setTxs] = useState<Tx[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [recurring, setRecurring] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { day: closingDay } = useBillingClosingDay();
@@ -63,12 +85,16 @@ function Dashboard() {
           .from("transactions")
           .select("id,type,amount,category,description,occurred_at,account_id")
           .order("occurred_at", { ascending: false }),
-        supabase.from("accounts").select("*").order("created_at", { ascending: true }),
+        supabase.from("accounts").select("*, bank_connections(institution_name)").order("created_at", { ascending: true }),
         supabase.from("recurring_transactions").select("*").eq("active", true).order("next_run", { ascending: true }),
       ]);
 
       setTxs((tx.data ?? []).map((t: any) => ({ ...t, amount: Number(t.amount) })));
-      setAccounts((a.data ?? []).map((x: any) => ({ ...x, initial_balance: Number(x.initial_balance) })));
+      setAccounts((a.data ?? []).map((x: any) => ({
+        ...x,
+        initial_balance: Number(x.initial_balance),
+        credit_limit: x.credit_limit === null ? null : Number(x.credit_limit),
+      })));
       setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
       setLoading(false);
     })();
@@ -96,6 +122,48 @@ function Dashboard() {
     return { saldo, series };
   }, [txs, closingDay]);
 
+  const accountBalances = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of accounts) map.set(a.id, a.initial_balance);
+    for (const t of txs) {
+      if (!t.account_id || !map.has(t.account_id)) continue;
+      map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
+    }
+    return map;
+  }, [accounts, txs]);
+
+  // ── Visão geral: contas bancárias agrupadas por instituição ──
+  const bankGroups = useMemo(() => {
+    const nonCredit = accounts.filter((a) => a.type !== "credit");
+    const groups = new Map<string, { name: string; count: number; total: number }>();
+    let grandTotal = 0;
+    for (const a of nonCredit) {
+      const key = a.bank_connections?.institution_name ?? a.name;
+      const bal = accountBalances.get(a.id) ?? a.initial_balance;
+      const g = groups.get(key) ?? { name: key, count: 0, total: 0 };
+      g.count += 1;
+      g.total += bal;
+      groups.set(key, g);
+      grandTotal += bal;
+    }
+    const list = Array.from(groups.values()).sort((a, b) => b.total - a.total);
+    return { total: grandTotal, groups: list };
+  }, [accounts, accountBalances]);
+
+  // ── Visão geral: cartões de crédito ──
+  const creditSummary = useMemo(() => {
+    const cards = accounts.filter((a) => a.type === "credit");
+    let owed = 0, limit = 0;
+    const items = cards.map((a) => {
+      const bal = accountBalances.get(a.id) ?? a.initial_balance;
+      owed += Math.max(0, -bal);
+      if (a.credit_limit) limit += a.credit_limit;
+      return { id: a.id, name: a.name, balance: bal };
+    }).sort((a, b) => a.balance - b.balance);
+    const pctUsed = limit > 0 ? Math.min(100, (owed / limit) * 100) : null;
+    return { owed, limit, pctUsed, items };
+  }, [accounts, accountBalances]);
+
   // ── Números do mês em foco ──
   const mStats = useMemo(() => {
     const mk = monthKey(month);
@@ -103,10 +171,9 @@ function Dashboard() {
     const monthTxs = txs.filter((t) => billingMonthKey(t.occurred_at, closingDay) === mk);
 
     let inc = 0, exp = 0, prevInc = 0, prevExp = 0;
-    const cats = new Map<string, number>();
     for (const t of monthTxs) {
       if (t.type === "income") inc += t.amount;
-      else { exp += t.amount; cats.set(t.category, (cats.get(t.category) ?? 0) + t.amount); }
+      else exp += t.amount;
     }
     for (const t of txs) {
       if (billingMonthKey(t.occurred_at, closingDay) !== prevMk) continue;
@@ -120,10 +187,7 @@ function Dashboard() {
       ? Math.round(((available - prevAvailable) / Math.abs(prevAvailable)) * 100)
       : null;
 
-    const byCat = Array.from(cats.entries()).map(([id, value]) => {
-      const c = getCategory("expense", id);
-      return { id, name: c.label, value, color: c.color };
-    }).sort((a, b) => b.value - a.value);
+    const byCat = groupByCategory(monthTxs.filter((t) => t.type === "expense"));
 
     // Insights do mês
     type Insight = { kind: "good" | "warn" | "info"; icon: any; text: string };
@@ -147,6 +211,14 @@ function Dashboard() {
     return { inc, exp, available, availableTrend, byCat, insights, count: monthTxs.length, monthTxs };
   }, [txs, month, closingDay]);
 
+  // ── Despesas futuras: gastos com data ainda não chegada (ex: parcelas futuras) ──
+  const futureExpenses = useMemo(() => {
+    const today = todayYMD();
+    const future = txs.filter((t) => t.type === "expense" && t.occurred_at > today);
+    const total = future.reduce((s, t) => s + t.amount, 0);
+    return { total, byCat: groupByCategory(future), count: future.length };
+  }, [txs]);
+
   // Barras: ganhos vs gastos dos últimos 6 meses
   const last6 = useMemo(() => {
     const acc = new Map<string, { income: number; expense: number }>();
@@ -162,17 +234,8 @@ function Dashboard() {
       .map(([k, v]) => ({ month: MONTHS_PT[Number(k.split("-")[1]) - 1].slice(0, 3), income: v.income, expense: v.expense }));
   }, [txs, closingDay]);
 
-  const accountBalances = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const a of accounts) map.set(a.id, a.initial_balance);
-    for (const t of txs) {
-      if (!t.account_id || !map.has(t.account_id)) continue;
-      map.set(t.account_id, (map.get(t.account_id) ?? 0) + (t.type === "income" ? t.amount : -t.amount));
-    }
-    return map;
-  }, [accounts, txs]);
-
   const maxCat = mStats.byCat[0]?.value ?? 0;
+  const maxFutureCat = futureExpenses.byCat[0]?.value ?? 0;
   const isCurrentMonth = monthKey(month) === billingMonthKey(todayYMD(), closingDay);
   const monthLabel = `${MONTHS_PT[month.getMonth()]} de ${month.getFullYear()}`;
   const cycle = billingCycleRange(month.getFullYear(), month.getMonth() + 1, closingDay);
@@ -198,12 +261,68 @@ function Dashboard() {
         <p className="text-muted-foreground mt-1">Resumo das suas finanças pessoais</p>
       </header>
 
-      {/* ── Saldo total — tudo que sobrou, de todos os meses ── */}
+      {/* ── Visão geral: Contas / Cartões / Investimentos ── */}
+      <div className="grid gap-4 md:grid-cols-3 mb-6">
+        <OverviewCard icon={<Landmark className="h-4 w-4" />} label="Contas bancárias" value={formatBRL(bankGroups.total)}>
+          {bankGroups.groups.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">Nenhuma conta ainda.</p>
+          ) : (
+            <ul className="space-y-2.5 mt-3">
+              {bankGroups.groups.map((g) => {
+                const pct = bankGroups.total !== 0 ? (g.total / bankGroups.total) * 100 : 0;
+                return (
+                  <li key={g.name} className="flex items-center justify-between text-sm">
+                    <span className="truncate">
+                      <span className="block truncate">{g.name}</span>
+                      <span className="text-xs text-muted-foreground">{g.count} conta{g.count > 1 ? "s" : ""} · {pct.toFixed(1)}%</span>
+                    </span>
+                    <span className="font-medium tabular-nums shrink-0 ml-2">{formatBRL(g.total)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </OverviewCard>
+
+        <OverviewCard icon={<CreditCard className="h-4 w-4" />} label="Cartões de crédito" value={formatBRL(creditSummary.owed)} valueTone="destructive">
+          {creditSummary.pctUsed !== null && (
+            <div className="mt-2 mb-3">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>{creditSummary.pctUsed.toFixed(0)}% utilizado</span>
+                <span>Limite: {formatBRL(creditSummary.limit)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                <div className="h-full rounded-full bg-[color:var(--destructive)]" style={{ width: `${creditSummary.pctUsed}%` }} />
+              </div>
+            </div>
+          )}
+          {creditSummary.items.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2">Nenhum cartão ainda.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {creditSummary.items.map((c) => (
+                <li key={c.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate">{c.name}</span>
+                  <span className="font-medium tabular-nums text-[color:var(--destructive)] shrink-0 ml-2">{formatBRL(c.balance)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </OverviewCard>
+
+        <OverviewCard icon={<LineChart className="h-4 w-4" />} label="Investimentos" value="Em breve">
+          <p className="text-sm text-muted-foreground py-2">
+            Acompanhamento de ativos e carteira ainda não disponível — chegando em breve.
+          </p>
+        </OverviewCard>
+      </div>
+
+      {/* ── Evolução do saldo ── */}
       <div className="bg-gradient-primary text-primary-foreground rounded-2xl p-6 md:p-8 shadow-card mb-8">
         <div className="flex items-end justify-between flex-wrap gap-2 mb-3">
           <div>
             <p className="text-sm text-primary-foreground/80 flex items-center gap-1.5">
-              <Coins className="h-4 w-4" /> Saldo total
+              <Coins className="h-4 w-4" /> Evolução do saldo
             </p>
             <p className="text-4xl md:text-5xl font-semibold tabular-nums mt-1">
               {formatBRL(total.saldo)}
@@ -300,6 +419,69 @@ function Dashboard() {
         </div>
       )}
 
+      {/* Despesas atuais e futuras */}
+      <div className="grid gap-6 lg:grid-cols-2 mb-8">
+        <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
+          <h3 className="font-medium mb-4">Despesas</h3>
+          {mStats.byCat.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum gasto na fatura de {monthLabel}.</p>
+          ) : (
+            <ul className="space-y-3">
+              {mStats.byCat.map((c) => {
+                const pct = maxCat > 0 ? (c.value / maxCat) * 100 : 0;
+                return (
+                  <li key={c.id}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="flex items-center gap-2 truncate">
+                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                        <span className="truncate">{c.name}</span>
+                      </span>
+                      <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-medium">Despesas futuras</h3>
+          </div>
+          {futureExpenses.byCat.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma despesa futura agendada (ex: parcelas).</p>
+          ) : (
+            <>
+              <p className="text-2xl font-semibold tabular-nums mb-4">{formatBRL(futureExpenses.total)}</p>
+              <ul className="space-y-3">
+                {futureExpenses.byCat.slice(0, 6).map((c) => {
+                  const pct = maxFutureCat > 0 ? (c.value / maxFutureCat) * 100 : 0;
+                  return (
+                    <li key={c.id}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="flex items-center gap-2 truncate">
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
+                          <span className="truncate">{c.name}</span>
+                        </span>
+                        <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+
       {mStats.count === 0 ? (
         <div className="bg-gradient-card border border-border rounded-2xl p-12 text-center shadow-card mb-8">
           <TrendingUp className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
@@ -310,50 +492,9 @@ function Dashboard() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-3 mb-8">
-          {/* Gastos por categoria do mês */}
-          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
-            <h3 className="font-medium mb-4">Gastos por categoria</h3>
-            {mStats.byCat.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum gasto neste mês.</p>
-            ) : (
-              <>
-                <div className="h-44">
-                  <ResponsiveContainer>
-                    <PieChart>
-                      <Pie data={mStats.byCat} dataKey="value" nameKey="name"
-                        innerRadius={48} outerRadius={78} paddingAngle={2}>
-                        {mStats.byCat.map((c, i) => <Cell key={i} fill={c.color} />)}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <ul className="mt-4 space-y-3">
-                  {mStats.byCat.slice(0, 5).map((c) => {
-                    const pct = maxCat > 0 ? (c.value / maxCat) * 100 : 0;
-                    return (
-                      <li key={c.id}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="flex items-center gap-2 truncate">
-                            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
-                            <span className="truncate">{c.name}</span>
-                          </span>
-                          <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} />
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            )}
-          </div>
-
+        <div className="grid gap-6 mb-8">
           {/* Ganhos vs Gastos — últimos 6 meses */}
-          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-2">
+          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
             <h3 className="font-medium mb-4">Ganhos vs Gastos — últimos 6 meses</h3>
             <div className="h-72">
               <ResponsiveContainer>
@@ -372,7 +513,7 @@ function Dashboard() {
           </div>
 
           {/* Transações do mês */}
-          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card lg:col-span-3">
+          <div className="bg-gradient-card border border-border rounded-2xl p-6 shadow-card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium">Transações da fatura de {monthLabel}</h3>
               <Link to="/transactions" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
@@ -408,23 +549,6 @@ function Dashboard() {
 
       {/* ── Atalhos ── */}
       <div className="grid gap-4 md:grid-cols-2">
-        <SectionCard title="Contas" icon={<CreditCard className="h-4 w-4" />} to="/accounts" empty={accounts.length === 0} emptyText="Adicione uma conta">
-          <ul className="space-y-2.5">
-            {accounts.slice(0, 4).map((a) => {
-              const bal = accountBalances.get(a.id) ?? a.initial_balance;
-              return (
-                <li key={a.id} className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 truncate">
-                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: a.color }} />
-                    <span className="truncate">{a.name}</span>
-                  </span>
-                  <span className="font-medium tabular-nums">{formatBRL(bal)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </SectionCard>
-
         <SectionCard title="Próximas recorrentes" icon={<Repeat className="h-4 w-4" />} to="/recurring" empty={recurring.length === 0} emptyText="Sem recorrências ativas">
           <ul className="space-y-2.5">
             {recurring.slice(0, 4).map((r) => (
@@ -440,7 +564,31 @@ function Dashboard() {
             ))}
           </ul>
         </SectionCard>
+
+        <SectionCard title="Histórico completo" icon={<TrendingUp className="h-4 w-4" />} to="/transactions" empty={txs.length === 0} emptyText="Nenhuma transação ainda">
+          <p className="text-sm text-muted-foreground">
+            {txs.length} transaç{txs.length === 1 ? "ão registrada" : "ões registradas"} no total — busque, filtre e edite tudo por lá.
+          </p>
+        </SectionCard>
       </div>
+    </div>
+  );
+}
+
+function OverviewCard({
+  icon, label, value, valueTone, children,
+}: {
+  icon: React.ReactNode; label: string; value: string; valueTone?: "destructive"; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-gradient-card border border-border rounded-2xl p-5 shadow-card">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+        {icon} {label}
+      </div>
+      <p className={`text-2xl font-semibold tabular-nums ${valueTone === "destructive" ? "text-[color:var(--destructive)]" : ""}`}>
+        {value}
+      </p>
+      {children}
     </div>
   );
 }
