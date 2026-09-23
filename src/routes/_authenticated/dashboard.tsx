@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getCategory } from "@/lib/categories";
 import { useMoney, usePrivacy } from "@/hooks/use-privacy";
+import { InstitutionBadge } from "@/components/institution-badge";
+import { CardInvoiceSheet } from "@/components/card-invoice-sheet";
 import { tooltipStyle } from "@/lib/tooltip-style";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
@@ -86,6 +88,7 @@ function Dashboard() {
   const { day: closingDay } = useBillingClosingDay();
   const money = useMoney();
   const { hidden: balancesHidden, toggle: toggleBalances } = usePrivacy();
+  const [invoiceCard, setInvoiceCard] = useState<{ id: string; name: string } | null>(null);
   // Fatura em foco — começa na fatura que contém o dia de hoje.
   const [month, setMonth] = useState<Date>(() => {
     const [y, m] = billingMonthKey(todayYMD(), closingDay).split("-").map(Number);
@@ -213,7 +216,15 @@ function Dashboard() {
       const bal = accountBalances.get(a.id) ?? a.initial_balance;
       owed += Math.max(0, -bal);
       if (a.credit_limit) limit += a.credit_limit;
-      return { id: a.id, name: a.name, balance: bal, mask: a.account_mask };
+      return {
+        id: a.id,
+        name: a.name,
+        balance: bal,
+        mask: a.account_mask,
+        institution: a.institution_name,
+        owed: Math.max(0, -bal),
+        available: a.credit_limit ? a.credit_limit + bal : null,
+      };
     }).sort((a, b) => a.balance - b.balance);
     const pctUsed = limit > 0 ? Math.min(100, (owed / limit) * 100) : null;
     return { owed, limit, pctUsed, items };
@@ -349,6 +360,8 @@ function Dashboard() {
         </button>
       </header>
 
+      <CardInvoiceSheet card={invoiceCard} onClose={() => setInvoiceCard(null)} />
+
       {/* ── Visão geral: Contas / Cartões / Investimentos ── */}
       <div className="grid gap-4 md:grid-cols-3 mb-6">
         <OverviewCard icon={<Landmark className="h-4 w-4" />} label="Contas bancárias" value={money(bankGroups.total)}>
@@ -363,10 +376,13 @@ function Dashboard() {
                   <li key={g.name} className="py-2.5">
                     <button type="button" onClick={() => toggleGroup(g.name)}
                       className="w-full flex items-center justify-between text-sm text-left">
-                      <span className="truncate">
-                        <span className="block truncate">{g.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {g.accounts.length} conta{g.accounts.length > 1 ? "s" : ""} · {pct.toFixed(1)}%
+                      <span className="flex items-center gap-3 min-w-0">
+                        <InstitutionBadge name={g.name} />
+                        <span className="truncate">
+                          <span className="block truncate">{g.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {g.accounts.length} conta{g.accounts.length > 1 ? "s" : ""} · {pct.toFixed(1)}%
+                          </span>
                         </span>
                       </span>
                       <span className="flex items-center gap-2 shrink-0 ml-2">
@@ -410,14 +426,30 @@ function Dashboard() {
           {creditSummary.items.length === 0 ? (
             <p className="text-sm text-muted-foreground py-2">Nenhum cartão ainda.</p>
           ) : (
-            <ul className="space-y-2.5">
+            <ul className="space-y-3">
               {creditSummary.items.map((c) => (
-                <li key={c.id} className="flex items-center justify-between text-sm">
-                  <span className="truncate">
-                    <span className="block truncate">{c.name}</span>
-                    {c.mask && <span className="text-xs text-muted-foreground">xxxx {c.mask}</span>}
-                  </span>
-                  <span className="font-medium tabular-nums text-[color:var(--destructive)] shrink-0 ml-2">{money(Math.max(0, -c.balance))}</span>
+                <li key={c.id} className="rounded-xl border border-border p-3">
+                  <div className="flex items-center gap-3">
+                    {c.institution && <InstitutionBadge name={c.institution} className="h-8 w-8" />}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{c.name}</span>
+                      {c.mask && <span className="text-xs text-muted-foreground">xxxx {c.mask}</span>}
+                    </span>
+                    <button type="button" onClick={() => setInvoiceCard({ id: c.id, name: c.name })}
+                      className="shrink-0 rounded-md bg-primary/15 px-2.5 py-1 text-xs font-medium text-[color:var(--primary)] hover:bg-primary/25 transition-colors">
+                      Ver fatura
+                    </button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Disponível</p>
+                      <p className="font-semibold tabular-nums">{c.available != null ? money(c.available) : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Usado</p>
+                      <p className="font-semibold tabular-nums text-[color:var(--destructive)]">{money(c.owed)}</p>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>

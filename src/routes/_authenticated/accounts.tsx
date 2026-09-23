@@ -4,6 +4,8 @@ import type { ComponentType } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useMoney } from "@/hooks/use-privacy";
+import { InstitutionBadge } from "@/components/institution-badge";
+import { CardInvoiceSheet } from "@/components/card-invoice-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +73,7 @@ function AccountsPage() {
   const callGetConnectToken = useServerFn(getConnectToken);
   const { syncConnection } = usePluggySync();
   const money = useMoney();
+  const [invoiceCard, setInvoiceCard] = useState<{ id: string; name: string } | null>(null);
 
   // `quiet` recarrega sem trocar a tela por "Carregando..." (usado quando uma sincronização termina).
   const load = async (quiet = false) => {
@@ -239,6 +242,8 @@ function AccountsPage() {
         />
       )}
 
+      <CardInvoiceSheet card={invoiceCard} onClose={() => setInvoiceCard(null)} />
+
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Editar conta</DialogTitle></DialogHeader>
@@ -280,10 +285,14 @@ function AccountsPage() {
                     </button>
                   </div>
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="h-10 w-10 rounded-xl flex items-center justify-center"
-                      style={{ background: `color-mix(in oklab, ${a.color} 20%, transparent)`, color: a.color }}>
-                      <Icon className="h-5 w-5" />
-                    </div>
+                    {a.institution_name ? (
+                      <InstitutionBadge name={a.institution_name} className="h-10 w-10" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-xl flex items-center justify-center"
+                        style={{ background: `color-mix(in oklab, ${a.color} 20%, transparent)`, color: a.color }}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                    )}
                     <div>
                       <p className="font-medium">{a.name}</p>
                       <p className="text-xs text-muted-foreground">
@@ -301,6 +310,12 @@ function AccountsPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Limite {money(a.credit_limit!)} · Disponível {money(available!)}
                     </p>
+                  )}
+                  {a.type === "credit" && (
+                    <Button variant="secondary" size="sm" className="mt-3 w-full"
+                      onClick={() => setInvoiceCard({ id: a.id, name: a.name })}>
+                      Ver fatura
+                    </Button>
                   )}
                 </div>
               );
