@@ -114,17 +114,22 @@ export async function listAccounts(itemId: string): Promise<PluggyAccount[]> {
   return results;
 }
 
-export async function listTransactions(accountId: string, dateFrom?: string): Promise<PluggyTransaction[]> {
+/**
+ * Uma página (até 500) de transações. /transactions (v1) foi descontinuado (410); o v2 usa
+ * cursor: `next` vem como querystring pronta, da qual extraímos só o token `after`.
+ */
+export async function listTransactionsPage(
+  accountId: string,
+  opts: { dateFrom?: string; after?: string } = {}
+): Promise<{ results: PluggyTransaction[]; cursor: string | null }> {
   const apiKey = await getApiKey();
-  const all: PluggyTransaction[] = [];
-  // /transactions (v1) foi descontinuado (410) — /v2/transactions usa paginação por
-  // cursor: o campo `next` já vem pronto como querystring, só concatenar no path.
-  let path = `/v2/transactions?accountId=${accountId}${dateFrom ? `&dateFrom=${dateFrom}` : ""}`;
-  while (true) {
-    const data = await pluggyFetch<{ results: PluggyTransaction[]; next: string | null }>(path, { apiKey });
-    all.push(...data.results);
-    if (!data.next) break;
-    path = `/v2/transactions${data.next}`;
-  }
-  return all;
+  const params = new URLSearchParams({ accountId });
+  if (opts.dateFrom) params.set("dateFrom", opts.dateFrom);
+  if (opts.after) params.set("after", opts.after);
+  const data = await pluggyFetch<{ results: PluggyTransaction[]; next: string | null }>(
+    `/v2/transactions?${params}`,
+    { apiKey }
+  );
+  const cursor = data.next ? new URLSearchParams(data.next).get("after") : null;
+  return { results: data.results, cursor };
 }

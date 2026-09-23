@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { authenticateWithToken } from '@/integrations/supabase/server-auth';
-import { createConnectToken, getItem, listAccounts, listTransactions } from './client.server';
+import { createConnectToken, getItem, listAccounts, listTransactionsPage } from './client.server';
 
 // Códigos de banco (BACEN) que conseguimos reconhecer pelo transferNumber. Como o conector
 // MeuPluggy não informa a instituição de origem, este é o único sinal disponível.
@@ -33,6 +33,11 @@ const syncItemSchema = z
   })
   .refine((v) => v.itemId || v.connectionId, { message: 'itemId ou connectionId é obrigatório' });
 
+/**
+ * Parte leve da sincronização: conexão, contas e saldos. As transações NÃO são importadas aqui —
+ * o Worker tem limite de CPU e trazer o histórico inteiro numa requisição só o estoura (erro 1102).
+ * Devolvemos a lista de contas e o navegador busca as transações página a página (getTransactionsPage).
+ */
 export const syncItem = createServerFn({ method: 'POST' })
   .inputValidator((data: unknown) => syncItemSchema.parse(data))
   .handler(async ({ data }) => {
@@ -40,10 +45,9 @@ export const syncItem = createServerFn({ method: 'POST' })
 
     let pluggyItemId = data.itemId;
     let connectionId = data.connectionId;
-    // Re-sincronizações só buscam transações recentes: baixar o histórico inteiro toda vez
-    // estoura o limite de CPU do Worker (503 "exceeded CPU time limit"). Margem de 7 dias
-    // cobre lançamentos que a Pluggy publica com atraso.
-    let syncSince: string | undefined;
+    // Re-sincronizações só buscam transações desde a última sincronização concluída, com margem
+    // de 7 dias para lançamentos que a Pluggy publica com atraso.
+    let since: string | null = null;
 
     if (connectionId) {
       const { data: conn, error } = await supabase
@@ -54,7 +58,7 @@ export const syncItem = createServerFn({ method: 'POST' })
       if (error || !conn) throw new Error('Conexão bancária não encontrada');
       pluggyItemId = conn.pluggy_item_id;
       if (conn.last_synced_at) {
-        syncSince = new Date(new Date(conn.last_synced_at).getTime() - 7 * 86400000).toISOString().slice(0, 10);
+        since = new Date(new Date(conn.last_synced_at).getTime() - 7 * 86400000).toISOString().slice(0, 10);
       }
     }
     if (!pluggyItemId) throw new Error('itemId ausente');
@@ -79,8 +83,7 @@ export const syncItem = createServerFn({ method: 'POST' })
     }
 
     const pluggyAccounts = await listAccounts(pluggyItemId);
-    let accountsSynced = 0;
-    let transactionsInserted = 0;
+    const accounts: { localId: string; pluggyId: string; name: string; isNew: boolean }[] = [];
 
     // Cartões não trazem bankData; herdam a instituição das contas do mesmo item.
     const itemInstitution =
@@ -91,7 +94,6 @@ export const syncItem = createServerFn({ method: 'POST' })
       const syncedBalance = pAccount.type === 'CREDIT' ? -pAccount.balance : pAccount.balance;
       const creditLimit = pAccount.creditData?.creditLimit ?? null;
       const mask = (pAccount.number ?? '').replace(/\D/g, '').slice(-4) || null;
-
       const derivedInstitution = bankNameFromTransferNumber(pAccount.bankData?.transferNumber) ?? itemInstitution;
 
       const { data: existingAccount } = await supabase
@@ -101,7 +103,7 @@ export const syncItem = createServerFn({ method: 'POST' })
         .maybeSingle();
 
       let localAccountId = existingAccount?.id;
-      const isNewAccount = !localAccountId;
+      const isNew = !localAccountId;
 
       if (localAccountId) {
         // A instituição só é preenchida quando ainda está vazia: se o usuário renomeou
@@ -136,35 +138,47 @@ export const syncItem = createServerFn({ method: 'POST' })
         if (error) throw new Error(error.message);
         localAccountId = created.id;
       }
-      accountsSynced++;
 
-      // Pluggy pode retornar lançamentos com valor 0 (ex: autorizações pendentes);
-      // ignoramos, já que amount > 0 é obrigatório no schema (mesma regra da importação de CSV/OFX).
-      // Conta nova precisa do histórico completo; conta existente só do que veio depois da última sincronização.
-      const pluggyTxs = (await listTransactions(pAccount.id, isNewAccount ? undefined : syncSince)).filter((t) => t.amount !== 0);
-      if (pluggyTxs.length === 0) continue;
-
-      const rows = pluggyTxs.map((t) => ({
-        user_id: userId,
-        type: t.type === 'CREDIT' ? ('income' as const) : ('expense' as const),
-        amount: Math.abs(t.amount),
-        category: 'outros',
-        description: t.description || null,
-        occurred_at: t.date.slice(0, 10),
-        account_id: localAccountId,
-        pluggy_transaction_id: t.id,
-      }));
-
-      const { error, count } = await supabase
-        .from('transactions')
-        .upsert(rows, { onConflict: 'pluggy_transaction_id', ignoreDuplicates: true, count: 'exact' });
-      if (error) throw new Error(error.message);
-      transactionsInserted += count ?? 0;
+      accounts.push({ localId: localAccountId!, pluggyId: pAccount.id, name: pAccount.name, isNew });
     }
 
-    // Só marca como sincronizado ao terminar: se uma execução falhar no meio, a próxima
-    // volta a buscar desde a última sincronização que realmente completou.
-    await supabase.from('bank_connections').update({ last_synced_at: new Date().toISOString() }).eq('id', connectionId);
+    return { connectionId: connectionId!, accounts, since };
+  });
 
-    return { accountsSynced, transactionsInserted };
+const transactionsPageSchema = z.object({
+  accessToken: z.string(),
+  pluggyAccountId: z.string().uuid(),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  after: z.string().max(500).optional(),
+});
+
+/** Uma página (até 500) de transações de uma conta sincronizada, já no formato do app. */
+export const getTransactionsPage = createServerFn({ method: 'POST' })
+  .inputValidator((data: unknown) => transactionsPageSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { supabase } = await authenticateWithToken(data.accessToken);
+
+    // Só entrega transações de contas que pertencem ao usuário (RLS filtra por user_id).
+    const { data: owned } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('pluggy_account_id', data.pluggyAccountId)
+      .maybeSingle();
+    if (!owned) throw new Error('Conta não encontrada');
+
+    const page = await listTransactionsPage(data.pluggyAccountId, { dateFrom: data.dateFrom, after: data.after });
+
+    // Pluggy pode retornar lançamentos com valor 0 (ex: autorizações pendentes); ignoramos, já que
+    // amount > 0 é obrigatório no schema (mesma regra da importação de CSV/OFX).
+    const rows = page.results
+      .filter((t) => t.amount !== 0)
+      .map((t) => ({
+        id: t.id,
+        type: t.type === 'CREDIT' ? ('income' as const) : ('expense' as const),
+        amount: Math.abs(t.amount),
+        description: t.description || null,
+        date: t.date.slice(0, 10),
+      }));
+
+    return { rows, cursor: page.cursor };
   });

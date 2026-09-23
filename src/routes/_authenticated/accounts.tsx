@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Pencil, CreditCard, Wallet, Banknote, PiggyBank, Landmark, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PALETTE } from "@/lib/palette";
-import { getConnectToken, syncItem } from "@/integrations/pluggy/server-functions";
+import { getConnectToken, syncItem, getTransactionsPage } from "@/integrations/pluggy/server-functions";
 
 export const Route = createFileRoute("/_authenticated/accounts")({
   head: () => ({ meta: [{ title: "Contas — Finança" }] }),
@@ -69,6 +69,7 @@ function AccountsPage() {
 
   const callGetConnectToken = useServerFn(getConnectToken);
   const callSyncItem = useServerFn(syncItem);
+  const callGetTransactionsPage = useServerFn(getTransactionsPage);
 
   const load = async () => {
     setLoading(true);
@@ -170,16 +171,65 @@ function AccountsPage() {
     const accessToken = await getAccessToken();
     if (!accessToken) { toast.error("Sessão expirada"); return; }
     setSyncingId(syncKey);
+    const toastId = toast.loading("Sincronizando contas...");
+    const failure = "O servidor não concluiu a sincronização. Aguarde alguns segundos e tente de novo.";
     try {
-      const result = await callSyncItem({ data: { accessToken, ...input } });
-      // Se o Worker estoura o limite de CPU, o Cloudflare devolve um 503 que chega aqui sem corpo útil.
-      if (!result || typeof result.accountsSynced !== "number") {
-        throw new Error("O servidor não concluiu a sincronização. Aguarde alguns segundos e tente de novo.");
+      // 1) Parte leve no servidor: contas e saldos.
+      const sync = await callSyncItem({ data: { accessToken, ...input } });
+      if (!sync || !Array.isArray(sync.accounts)) throw new Error(failure);
+
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Sessão expirada");
+
+      // 2) Transações: o servidor entrega uma página por requisição (o Worker tem limite de CPU)
+      // e gravamos direto no Supabase daqui, com a sessão do usuário.
+      let inserted = 0;
+      for (const acc of sync.accounts) {
+        let after: string | undefined;
+        let seen = 0;
+        do {
+          toast.loading(`Importando ${acc.name}${seen ? ` (${seen} transações)` : ""}...`, { id: toastId });
+          const page = await callGetTransactionsPage({
+            data: {
+              accessToken,
+              pluggyAccountId: acc.pluggyId,
+              dateFrom: !acc.isNew && sync.since ? sync.since : undefined,
+              after,
+            },
+          });
+          if (!page || !Array.isArray(page.rows)) throw new Error(failure);
+
+          if (page.rows.length > 0) {
+            const { error, count } = await supabase.from("transactions").upsert(
+              page.rows.map((r) => ({
+                user_id: u.user!.id,
+                type: r.type,
+                amount: r.amount,
+                category: "outros",
+                description: r.description,
+                occurred_at: r.date,
+                account_id: acc.localId,
+                pluggy_transaction_id: r.id,
+              })),
+              { onConflict: "pluggy_transaction_id", ignoreDuplicates: true, count: "exact" },
+            );
+            if (error) throw new Error(error.message);
+            inserted += count ?? 0;
+          }
+          seen += page.rows.length;
+          after = page.cursor ?? undefined;
+        } while (after);
       }
-      toast.success(`${result.accountsSynced} conta(s), ${result.transactionsInserted} transação(ões) nova(s)`);
+
+      // Só marca como sincronizado ao terminar: se falhar no meio, a próxima tentativa recomeça
+      // desde a última sincronização que realmente completou.
+      await supabase.from("bank_connections").update({ last_synced_at: new Date().toISOString() }).eq("id", sync.connectionId);
+
+      toast.success(`${sync.accounts.length} conta(s), ${inserted} transação(ões) nova(s)`, { id: toastId });
       load();
     } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao sincronizar");
+      toast.error(e?.message ?? "Erro ao sincronizar", { id: toastId });
+      load();
     } finally {
       setSyncingId(null);
     }
