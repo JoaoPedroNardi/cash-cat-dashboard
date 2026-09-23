@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, Link, Navigate, useRouterState, useNavigate } 
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { usePluggySync } from "@/hooks/use-pluggy-sync";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, CreditCard, Repeat,
@@ -114,10 +115,15 @@ function AuthLayout() {
           })}
         </nav>
 
+        <ThemeToggle withLabel />
         <Button variant="ghost" onClick={logout} className="justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground">
           <LogOut className="h-4 w-4 mr-2" /> Sair
         </Button>
       </aside>
+
+      <div className="md:hidden fixed top-3 right-3 z-40">
+        <ThemeToggle />
+      </div>
 
       <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-sidebar border-t border-sidebar-border flex justify-around p-2 overflow-x-auto">
         {navItems.map((item) => {

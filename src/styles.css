@@ -45,10 +45,79 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Tema claro (padrão do CSS). O escuro é ativado pela classe .dark no <html>. */
 :root {
+  color-scheme: light;
   --radius: 0.875rem;
 
-  /* Dark fintech as default (no light mode toggle) */
+  --background: oklch(0.965 0.006 250);
+  --foreground: oklch(0.22 0.02 265);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 265);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 265);
+
+  --primary: oklch(0.6 0.17 150);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-glow: oklch(0.7 0.18 150);
+
+  --secondary: oklch(0.94 0.008 250);
+  --secondary-foreground: oklch(0.25 0.02 265);
+
+  --muted: oklch(0.95 0.008 250);
+  --muted-foreground: oklch(0.5 0.02 260);
+
+  --accent: oklch(0.6 0.18 295);
+  --accent-foreground: oklch(0.99 0 0);
+
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  --success: oklch(0.55 0.16 150);
+  --success-foreground: oklch(0.99 0 0);
+
+  --border: oklch(0.91 0.008 250);
+  --input: oklch(0.93 0.008 250);
+  --ring: oklch(0.6 0.17 150);
+
+  --chart-1: oklch(0.62 0.17 150);
+  --chart-2: oklch(0.58 0.18 295);
+  --chart-3: oklch(0.7 0.16 65);
+  --chart-4: oklch(0.62 0.2 28);
+  --chart-5: oklch(0.6 0.15 235);
+  --chart-6: oklch(0.63 0.19 350);
+  --chart-7: oklch(0.62 0.12 195);
+  --chart-8: oklch(0.7 0.17 115);
+  --chart-9: oklch(0.58 0.17 260);
+  --chart-10: oklch(0.6 0.2 325);
+  --chart-11: oklch(0.68 0.17 48);
+  --chart-12: oklch(0.6 0.04 250);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.3 0.02 265);
+  --sidebar-primary: oklch(0.6 0.17 150);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.95 0.03 155);
+  --sidebar-accent-foreground: oklch(0.25 0.03 155);
+  --sidebar-border: oklch(0.91 0.008 250);
+  --sidebar-ring: oklch(0.6 0.17 150);
+
+  --gradient-primary: linear-gradient(135deg, oklch(0.62 0.17 150), oklch(0.56 0.16 175));
+  --gradient-accent: linear-gradient(135deg, oklch(0.6 0.18 295), oklch(0.66 0.18 320));
+  --gradient-card: linear-gradient(160deg, oklch(1 0 0), oklch(0.985 0.004 250));
+  --shadow-glow: 0 10px 30px -12px oklch(0.6 0.17 150 / 0.45);
+  --shadow-card: 0 1px 2px oklch(0.2 0.02 265 / 0.05), 0 8px 24px -14px oklch(0.2 0.02 265 / 0.18);
+
+  --body-glow-1: oklch(0.62 0.17 150 / 0.06);
+  --body-glow-2: oklch(0.58 0.18 295 / 0.05);
+}
+
+/* Tema escuro (o visual original do app) */
+.dark {
+  color-scheme: dark;
+
   --background: oklch(0.16 0.018 265);
   --foreground: oklch(0.97 0.005 260);
 
@@ -108,9 +177,10 @@
   --gradient-card: linear-gradient(160deg, oklch(0.23 0.025 265), oklch(0.19 0.022 265));
   --shadow-glow: 0 10px 40px -10px oklch(0.78 0.18 155 / 0.35);
   --shadow-card: 0 8px 32px -12px oklch(0.1 0.02 265 / 0.6);
-}
 
-.dark { color-scheme: dark; }
+  --body-glow-1: oklch(0.78 0.18 155 / 0.08);
+  --body-glow-2: oklch(0.7 0.18 295 / 0.07);
+}
 
 @layer base {
   * { border-color: var(--color-border); }
@@ -118,8 +188,8 @@
   body {
     font-feature-settings: "cv11", "ss01";
     background-image:
-      radial-gradient(circle at 20% 0%, oklch(0.78 0.18 155 / 0.08), transparent 40%),
-      radial-gradient(circle at 80% 100%, oklch(0.7 0.18 295 / 0.07), transparent 40%);
+      radial-gradient(circle at 20% 0%, var(--body-glow-1), transparent 40%),
+      radial-gradient(circle at 80% 100%, var(--body-glow-2), transparent 40%);
     background-attachment: fixed;
     min-height: 100vh;
   }

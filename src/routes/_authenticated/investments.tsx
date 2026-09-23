@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { formatBRL } from "@/lib/categories";
+import { useMoney } from "@/hooks/use-privacy";
 import { formatDateBR } from "@/lib/utils";
 import {
   INVESTMENT_CLASSES, investmentClass, isActiveInvestment, investmentSubtypeLabel, formatRate,
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/investments")({
 type GroupBy = "classe" | "instituicao";
 
 function InvestmentsPage() {
+  const money = useMoney();
   const [items, setItems] = useState<Investment[]>([]);
   const [institutionByConnection, setInstitutionByConnection] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -132,7 +133,7 @@ function InvestmentsPage() {
             <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
               <div>
                 <p className="text-sm text-muted-foreground">Total investido hoje</p>
-                <p className="text-3xl md:text-4xl font-semibold tabular-nums mt-1">{formatBRL(summary.total)}</p>
+                <p className="text-3xl md:text-4xl font-semibold tabular-nums mt-1">{money(summary.total)}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {summary.active.length} ativo{summary.active.length === 1 ? "" : "s"}
                   {summary.closed.length > 0 && ` · ${summary.closed.length} encerrado${summary.closed.length === 1 ? "" : "s"}`}
@@ -168,7 +169,7 @@ function InvestmentsPage() {
                       </span>
                       <span className="tabular-nums">
                         <span className="text-muted-foreground mr-3">{pct.toFixed(1)}%</span>
-                        <span className="font-medium">{formatBRL(g.total)}</span>
+                        <span className="font-medium">{money(g.total)}</span>
                       </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -185,7 +186,7 @@ function InvestmentsPage() {
               <section key={g.key}>
                 <div className="flex items-center justify-between px-1 mb-2">
                   <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">{g.label}</h2>
-                  <span className="text-sm font-medium tabular-nums text-muted-foreground">{formatBRL(g.total)}</span>
+                  <span className="text-sm font-medium tabular-nums text-muted-foreground">{money(g.total)}</span>
                 </div>
                 <ul className="bg-gradient-card border border-border rounded-2xl shadow-card divide-y divide-border overflow-hidden">
                   {g.items.map((i) => (
@@ -224,6 +225,7 @@ function AssetRow({
 }: {
   inv: Investment; total: number; institution: string; open: boolean; onToggle: () => void; closed?: boolean;
 }) {
+  const money = useMoney();
   const subtype = investmentSubtypeLabel(inv.subtype);
   const pct = total > 0 && !closed ? (inv.balance / total) * 100 : null;
   const profit = inv.invested_amount && inv.invested_amount > 0 ? inv.balance - inv.invested_amount : null;
@@ -232,10 +234,10 @@ function AssetRow({
 
   const details: [string, string][] = [];
   if (inv.quantity != null) details.push(["Quantidade", inv.quantity.toLocaleString("pt-BR", { maximumFractionDigits: 6 })]);
-  if (inv.unit_value != null) details.push(["Valor unitário", formatBRL(inv.unit_value)]);
-  if (inv.invested_amount != null) details.push(["Valor aplicado", formatBRL(inv.invested_amount)]);
+  if (inv.unit_value != null) details.push(["Valor unitário", money(inv.unit_value)]);
+  if (inv.invested_amount != null) details.push(["Valor aplicado", money(inv.invested_amount)]);
   if (profit != null) {
-    details.push(["Resultado", `${profit >= 0 ? "+" : "−"}${formatBRL(Math.abs(profit))} (${profitPct!.toFixed(2)}%)`]);
+    details.push(["Resultado", `${profit >= 0 ? "+" : "−"}${money(Math.abs(profit))} (${profitPct!.toFixed(2)}%)`]);
   }
   if (rate) details.push(["Taxa", rate]);
   if (inv.due_date) details.push(["Vencimento", formatDateBR(inv.due_date)]);
@@ -252,7 +254,7 @@ function AssetRow({
           </p>
         </div>
         <div className="text-right shrink-0">
-          <p className="font-semibold tabular-nums">{formatBRL(inv.balance)}</p>
+          <p className="font-semibold tabular-nums">{money(inv.balance)}</p>
           {pct != null && <p className="text-xs text-muted-foreground tabular-nums">{pct.toFixed(1)}%</p>}
         </div>
         <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />

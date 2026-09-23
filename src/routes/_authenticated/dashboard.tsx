@@ -2,12 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { startOfMonth, addMonths, subMonths } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { formatBRL, getCategory } from "@/lib/categories";
+import { getCategory } from "@/lib/categories";
+import { useMoney, usePrivacy } from "@/hooks/use-privacy";
 import { tooltipStyle } from "@/lib/tooltip-style";
 import {
   ArrowDownRight, ArrowUpRight, PiggyBank, TrendingUp, Wallet, Calendar,
   Lightbulb, AlertTriangle, Sparkles, TrendingDown, ChevronLeft, ChevronRight,
-  Repeat, ArrowRight, Coins, Landmark, CreditCard, LineChart, Clock, ChevronDown,
+  Repeat, ArrowRight, Coins, Landmark, CreditCard, LineChart, Clock, ChevronDown, Eye, EyeOff,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -52,6 +53,13 @@ const MONTHS_PT = [
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ];
 
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Bom dia";
+  if (hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
 /** "YYYY-MM" do mês de uma data, em horário local. */
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -76,6 +84,8 @@ function Dashboard() {
   const [investments, setInvestments] = useState<{ type: string; subtype: string | null; balance: number; status: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const { day: closingDay } = useBillingClosingDay();
+  const money = useMoney();
+  const { hidden: balancesHidden, toggle: toggleBalances } = usePrivacy();
   // Fatura em foco — começa na fatura que contém o dia de hoje.
   const [month, setMonth] = useState<Date>(() => {
     const [y, m] = billingMonthKey(todayYMD(), closingDay).split("-").map(Number);
@@ -258,10 +268,10 @@ function Dashboard() {
     type Insight = { kind: "good" | "warn" | "info"; icon: any; text: string };
     const insights: Insight[] = [];
     if (byCat[0]) {
-      insights.push({ kind: "info", icon: Sparkles, text: `${byCat[0].name} foi seu maior gasto do mês (${formatBRL(byCat[0].value)}).` });
+      insights.push({ kind: "info", icon: Sparkles, text: `${byCat[0].name} foi seu maior gasto do mês (${money(byCat[0].value)}).` });
     }
     if (exp > inc && inc > 0) {
-      insights.push({ kind: "warn", icon: AlertTriangle, text: `Você gastou ${formatBRL(exp - inc)} a mais do que ganhou neste mês.` });
+      insights.push({ kind: "warn", icon: AlertTriangle, text: `Você gastou ${money(exp - inc)} a mais do que ganhou neste mês.` });
     } else if (inc > 0 && available / inc >= 0.3) {
       insights.push({ kind: "good", icon: PiggyBank, text: `Você guardou ${Math.round((available / inc) * 100)}% do que ganhou neste mês.` });
     }
@@ -274,7 +284,7 @@ function Dashboard() {
     }
 
     return { inc, exp, available, availableTrend, byCat, insights, count: monthTxs.length, monthTxs };
-  }, [txs, month, closingDay]);
+  }, [txs, month, closingDay, money]);
 
   // ── Despesas futuras: gastos com data ainda não chegada (ex: parcelas futuras) ──
   const futureExpenses = useMemo(() => {
@@ -322,14 +332,26 @@ function Dashboard() {
 
   return (
     <div className="p-6 md:p-10 max-w-6xl mx-auto">
-      <header className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Visão geral</h1>
-        <p className="text-muted-foreground mt-1">Resumo das suas finanças pessoais</p>
+      <header className="mb-8 flex items-start justify-between gap-4 pr-12 md:pr-0">
+        <div>
+          <p className="text-sm text-muted-foreground">{greeting()}</p>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Visão geral</h1>
+          <p className="text-muted-foreground mt-1">Resumo das suas finanças pessoais</p>
+        </div>
+        <button
+          type="button"
+          onClick={toggleBalances}
+          aria-label={balancesHidden ? "Mostrar valores" : "Esconder valores"}
+          title={balancesHidden ? "Mostrar valores" : "Esconder valores"}
+          className="h-9 w-9 shrink-0 rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground shadow-card flex items-center justify-center transition-colors"
+        >
+          {balancesHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
       </header>
 
       {/* ── Visão geral: Contas / Cartões / Investimentos ── */}
       <div className="grid gap-4 md:grid-cols-3 mb-6">
-        <OverviewCard icon={<Landmark className="h-4 w-4" />} label="Contas bancárias" value={formatBRL(bankGroups.total)}>
+        <OverviewCard icon={<Landmark className="h-4 w-4" />} label="Contas bancárias" value={money(bankGroups.total)}>
           {bankGroups.groups.length === 0 ? (
             <p className="text-sm text-muted-foreground py-2">Nenhuma conta ainda.</p>
           ) : (
@@ -349,7 +371,7 @@ function Dashboard() {
                       </span>
                       <span className="flex items-center gap-2 shrink-0 ml-2">
                         <span className={`font-medium tabular-nums ${g.total < 0 ? "text-[color:var(--destructive)]" : "text-[color:var(--success)]"}`}>
-                          {formatBRL(g.total)}
+                          {money(g.total)}
                         </span>
                         <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
                       </span>
@@ -361,7 +383,7 @@ function Dashboard() {
                             <span className="truncate text-muted-foreground">
                               {acc.name}{acc.mask ? ` · final ${acc.mask}` : ""}
                             </span>
-                            <span className="tabular-nums shrink-0 ml-2">{formatBRL(acc.balance)}</span>
+                            <span className="tabular-nums shrink-0 ml-2">{money(acc.balance)}</span>
                           </li>
                         ))}
                       </ul>
@@ -373,12 +395,12 @@ function Dashboard() {
           )}
         </OverviewCard>
 
-        <OverviewCard icon={<CreditCard className="h-4 w-4" />} label="Cartões de crédito" value={formatBRL(creditSummary.owed)} valueTone="destructive">
+        <OverviewCard icon={<CreditCard className="h-4 w-4" />} label="Cartões de crédito" value={money(creditSummary.owed)} valueTone="destructive">
           {creditSummary.pctUsed !== null && (
             <div className="mt-2 mb-3">
               <div className="flex justify-between text-xs text-muted-foreground mb-1">
                 <span>{creditSummary.pctUsed.toFixed(0)}% utilizado</span>
-                <span>Limite: {formatBRL(creditSummary.limit)}</span>
+                <span>Limite: {money(creditSummary.limit)}</span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div className="h-full rounded-full bg-[color:var(--destructive)]" style={{ width: `${creditSummary.pctUsed}%` }} />
@@ -395,14 +417,14 @@ function Dashboard() {
                     <span className="block truncate">{c.name}</span>
                     {c.mask && <span className="text-xs text-muted-foreground">xxxx {c.mask}</span>}
                   </span>
-                  <span className="font-medium tabular-nums text-[color:var(--destructive)] shrink-0 ml-2">{formatBRL(Math.max(0, -c.balance))}</span>
+                  <span className="font-medium tabular-nums text-[color:var(--destructive)] shrink-0 ml-2">{money(Math.max(0, -c.balance))}</span>
                 </li>
               ))}
             </ul>
           )}
         </OverviewCard>
 
-        <OverviewCard icon={<LineChart className="h-4 w-4" />} label="Investimentos" value={formatBRL(investmentSummary.total)}>
+        <OverviewCard icon={<LineChart className="h-4 w-4" />} label="Investimentos" value={money(investmentSummary.total)}>
           {investmentSummary.classes.length === 0 ? (
             <p className="text-sm text-muted-foreground py-2">
               Nenhum investimento sincronizado ainda. Sincronize uma conta de corretora em{" "}
@@ -423,7 +445,7 @@ function Dashboard() {
                       </span>
                       <span className="tabular-nums shrink-0 ml-2">
                         <span className="text-muted-foreground text-xs mr-2">{c.pct.toFixed(1)}%</span>
-                        <span className="font-medium">{formatBRL(c.total)}</span>
+                        <span className="font-medium">{money(c.total)}</span>
                       </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -448,10 +470,10 @@ function Dashboard() {
               <Coins className="h-4 w-4" /> Evolução do saldo
             </p>
             <p className="text-4xl md:text-5xl font-semibold tabular-nums mt-1">
-              {formatBRL(total.saldo)}
+              {money(total.saldo)}
             </p>
             <p className="text-xs text-primary-foreground/80 mt-1 tabular-nums">
-              Contas {formatBRL(total.banks)} · Cartões {formatBRL(total.cards)}
+              Contas {money(total.banks)} · Cartões {money(total.cards)}
             </p>
           </div>
           <span className="text-xs text-primary-foreground/70 max-w-[14rem] text-right">
@@ -469,7 +491,7 @@ function Dashboard() {
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="label" stroke="currentColor" opacity={0.6} fontSize={11} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => money(v)} />
                 <Area type="monotone" dataKey="value" stroke="currentColor" strokeWidth={2} fill="url(#gradTotal)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -509,11 +531,11 @@ function Dashboard() {
 
       {/* ── Os 3 números do mês ── */}
       <div className="grid gap-4 md:grid-cols-3 mb-8">
-        <StatCard label="Ganhei no mês" value={formatBRL(mStats.inc)}
+        <StatCard label="Ganhei no mês" value={money(mStats.inc)}
           icon={<ArrowUpRight className="h-5 w-5" />} accent="success" />
-        <StatCard label="Gastei no mês" value={formatBRL(mStats.exp)}
+        <StatCard label="Gastei no mês" value={money(mStats.exp)}
           icon={<ArrowDownRight className="h-5 w-5" />} accent="destructive" />
-        <StatCard label="Disponível para gastar" value={formatBRL(mStats.available)}
+        <StatCard label="Disponível para gastar" value={money(mStats.available)}
           icon={<Wallet className="h-5 w-5" />} highlight
           trend={mStats.availableTrend}
           sub={mStats.available >= 0 ? "Sobrou esse valor no mês" : "Você gastou mais do que ganhou"} />
@@ -562,7 +584,7 @@ function Dashboard() {
                         <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
                         <span className="truncate">{c.name}</span>
                       </span>
-                      <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
+                      <span className="font-medium tabular-nums">{money(c.value)}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} />
@@ -583,7 +605,7 @@ function Dashboard() {
             <p className="text-sm text-muted-foreground">Nenhuma despesa futura agendada (ex: parcelas).</p>
           ) : (
             <>
-              <p className="text-2xl font-semibold tabular-nums mb-4">{formatBRL(futureExpenses.total)}</p>
+              <p className="text-2xl font-semibold tabular-nums mb-4">{money(futureExpenses.total)}</p>
               <ul className="space-y-3">
                 {futureExpenses.byCat.slice(0, 6).map((c) => {
                   const pct = maxFutureCat > 0 ? (c.value / maxFutureCat) * 100 : 0;
@@ -594,7 +616,7 @@ function Dashboard() {
                           <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c.color }} />
                           <span className="truncate">{c.name}</span>
                         </span>
-                        <span className="font-medium tabular-nums">{formatBRL(c.value)}</span>
+                        <span className="font-medium tabular-nums">{money(c.value)}</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: c.color }} />
@@ -629,7 +651,7 @@ function Dashboard() {
                   <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
                   <YAxis stroke="var(--muted-foreground)" fontSize={12}
                     tickFormatter={(v) => `R$${Math.round(v / 1000)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatBRL(v)} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => money(v)} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="income" name="Ganhos" fill="var(--chart-2)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="expense" name="Gastos" fill="var(--chart-4)" radius={[6, 6, 0, 0]} />
@@ -663,7 +685,7 @@ function Dashboard() {
                       </p>
                     </div>
                     <span className={`font-semibold tabular-nums ${t.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
-                      {t.type === "income" ? "+" : "−"}{formatBRL(t.amount)}
+                      {t.type === "income" ? "+" : "−"}{money(t.amount)}
                     </span>
                   </li>
                 );
@@ -684,7 +706,7 @@ function Dashboard() {
                   <span className="text-xs text-muted-foreground">{new Date(r.next_run + "T00:00:00").toLocaleDateString("pt-BR")}</span>
                 </span>
                 <span className={`font-medium tabular-nums shrink-0 ${r.type === "income" ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
-                  {r.type === "income" ? "+" : "−"}{formatBRL(r.amount)}
+                  {r.type === "income" ? "+" : "−"}{money(r.amount)}
                 </span>
               </li>
             ))}

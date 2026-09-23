@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { formatBRL } from "@/lib/categories";
+import { useMoney } from "@/hooks/use-privacy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +70,7 @@ function AccountsPage() {
 
   const callGetConnectToken = useServerFn(getConnectToken);
   const { syncConnection } = usePluggySync();
+  const money = useMoney();
 
   // `quiet` recarrega sem trocar a tela por "Carregando..." (usado quando uma sincronização termina).
   const load = async (quiet = false) => {
@@ -294,11 +295,11 @@ function AccountsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">Saldo atual</p>
                   <p className={`text-2xl font-semibold tabular-nums ${bal < 0 ? "text-[color:var(--destructive)]" : ""}`}>
-                    {formatBRL(bal)}
+                    {money(bal)}
                   </p>
                   {isCredit && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Limite {formatBRL(a.credit_limit!)} · Disponível {formatBRL(available!)}
+                      Limite {money(a.credit_limit!)} · Disponível {money(available!)}
                     </p>
                   )}
                 </div>
