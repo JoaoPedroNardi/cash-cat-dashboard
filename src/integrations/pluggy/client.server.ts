@@ -112,15 +112,14 @@ export async function listAccounts(itemId: string): Promise<PluggyAccount[]> {
 export async function listTransactions(accountId: string): Promise<PluggyTransaction[]> {
   const apiKey = await getApiKey();
   const all: PluggyTransaction[] = [];
-  let page = 1;
+  // /transactions (v1) foi descontinuado (410) — /v2/transactions usa paginação por
+  // cursor: o campo `next` já vem pronto como querystring, só concatenar no path.
+  let path = `/v2/transactions?accountId=${accountId}`;
   while (true) {
-    const data = await pluggyFetch<{ results: PluggyTransaction[]; totalPages: number }>(
-      `/transactions?accountId=${accountId}&page=${page}&pageSize=500`,
-      { apiKey }
-    );
+    const data = await pluggyFetch<{ results: PluggyTransaction[]; next: string | null }>(path, { apiKey });
     all.push(...data.results);
-    if (page >= data.totalPages) break;
-    page++;
+    if (!data.next) break;
+    path = `/v2/transactions${data.next}`;
   }
   return all;
 }
