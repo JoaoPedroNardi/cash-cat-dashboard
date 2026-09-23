@@ -89,19 +89,27 @@ export const syncItem = createServerFn({ method: 'POST' })
       const creditLimit = pAccount.creditData?.creditLimit ?? null;
       const mask = (pAccount.number ?? '').replace(/\D/g, '').slice(-4) || null;
 
+      const derivedInstitution = bankNameFromTransferNumber(pAccount.bankData?.transferNumber) ?? itemInstitution;
+
       const { data: existingAccount } = await supabase
         .from('accounts')
-        .select('id')
+        .select('id, institution_name')
         .eq('pluggy_account_id', pAccount.id)
         .maybeSingle();
 
       let localAccountId = existingAccount?.id;
 
       if (localAccountId) {
-        // institution_name não é sobrescrito: o usuário pode ter renomeado (ex: "Clear Corretora").
+        // A instituição só é preenchida quando ainda está vazia: se o usuário renomeou
+        // (ex: "Clear Corretora"), a sincronização não pode desfazer isso.
         const { error } = await supabase
           .from('accounts')
-          .update({ synced_balance: syncedBalance, credit_limit: creditLimit, account_mask: mask })
+          .update({
+            synced_balance: syncedBalance,
+            credit_limit: creditLimit,
+            account_mask: mask,
+            ...(existingAccount?.institution_name ? {} : { institution_name: derivedInstitution }),
+          })
           .eq('id', localAccountId);
         if (error) throw new Error(error.message);
       } else {
@@ -115,7 +123,7 @@ export const syncItem = createServerFn({ method: 'POST' })
             synced_balance: syncedBalance,
             credit_limit: creditLimit,
             account_mask: mask,
-            institution_name: bankNameFromTransferNumber(pAccount.bankData?.transferNumber) ?? itemInstitution,
+            institution_name: derivedInstitution,
             pluggy_account_id: pAccount.id,
             bank_connection_id: connectionId,
           })
