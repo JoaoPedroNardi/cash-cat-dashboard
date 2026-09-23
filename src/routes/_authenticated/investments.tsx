@@ -8,6 +8,7 @@ import {
   type Investment,
 } from "@/lib/investments";
 import { ChevronDown, LineChart } from "lucide-react";
+import { useOnSyncDone } from "@/hooks/use-pluggy-sync";
 
 export const Route = createFileRoute("/_authenticated/investments")({
   head: () => ({ meta: [{ title: "Investimentos — Finança" }] }),
@@ -25,8 +26,8 @@ function InvestmentsPage() {
   const [showClosed, setShowClosed] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    (async () => {
+  const load = async () => {
+    {
       const [inv, accs] = await Promise.all([
         supabase.from("investments").select("*").order("balance", { ascending: false }),
         supabase.from("accounts").select("bank_connection_id,institution_name"),
@@ -55,8 +56,10 @@ function InvestmentsPage() {
       });
       setInstitutionByConnection(byConn);
       setLoading(false);
-    })();
-  }, []);
+    }
+  };
+  useEffect(() => { load(); }, []);
+  useOnSyncDone(load);
 
   const institutionOf = (i: Investment) =>
     (i.bank_connection_id && institutionByConnection.get(i.bank_connection_id)) || "Instituição";

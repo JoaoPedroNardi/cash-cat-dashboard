@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useOnSyncDone } from "@/hooks/use-pluggy-sync";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Trash2, Pencil, Search, X } from "lucide-react";
@@ -51,8 +52,8 @@ function TxList() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Tx | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     const { data } = await supabase
       .from("transactions")
       .select("id,type,amount,category,description,occurred_at,account_id,installment_group_id,ignore_in_totals")
@@ -61,6 +62,7 @@ function TxList() {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+  useOnSyncDone(() => load(true));
 
   const filtered = useMemo(() => {
     const q = search.q.trim().toLowerCase();

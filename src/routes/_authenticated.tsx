@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, Link, Navigate, useRouterState, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePluggySync } from "@/hooks/use-pluggy-sync";
 import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard, PlusCircle, ListOrdered, LogOut, Wallet, CreditCard, Repeat,
@@ -39,6 +40,36 @@ function AuthLayout() {
       });
     }
   }, [user]);
+
+  // Sincronização automática: ao abrir o app (e ao voltar para a aba), atualiza as conexões cuja
+  // última sincronização passou de 6h. A Pluggy só atualiza da corretora 1x/dia, então mais
+  // frequente que isso não traz nada novo. As sincronizações são incrementais (só o que é recente).
+  const { syncStale } = usePluggySync();
+  const lastAutoCheck = useRef(0);
+  useEffect(() => {
+    if (!user) return;
+    const check = async () => {
+      if (Date.now() - lastAutoCheck.current < 30 * 60 * 1000) return;
+      lastAutoCheck.current = Date.now();
+      const id = "auto-sync";
+      let started = false;
+      try {
+        const result = await syncStale(6, (message) => { started = true; toast.loading(message, { id }); });
+        if (!result) { if (started) toast.dismiss(id); return; }
+        toast.success(
+          result.inserted > 0 ? `Bancos atualizados: ${result.inserted} transação(ões) nova(s)` : "Bancos atualizados",
+          { id },
+        );
+      } catch {
+        toast.error("Não foi possível atualizar os bancos automaticamente. Tente em Contas, com \"Sincronizar agora\".", { id });
+      }
+    };
+    check();
+    const onVisible = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const logout = async () => {
     await supabase.auth.signOut();

@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Pencil, CreditCard, Wallet, Banknote, PiggyBank, Landmark, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PALETTE } from "@/lib/palette";
-import { getConnectToken, syncItem, getTransactionsPage } from "@/integrations/pluggy/server-functions";
+import { getConnectToken } from "@/integrations/pluggy/server-functions";
+import { usePluggySync, useOnSyncDone } from "@/hooks/use-pluggy-sync";
 
 export const Route = createFileRoute("/_authenticated/accounts")({
   head: () => ({ meta: [{ title: "Contas — Finança" }] }),
@@ -68,11 +69,11 @@ function AccountsPage() {
   }, []);
 
   const callGetConnectToken = useServerFn(getConnectToken);
-  const callSyncItem = useServerFn(syncItem);
-  const callGetTransactionsPage = useServerFn(getTransactionsPage);
+  const { syncConnection } = usePluggySync();
 
-  const load = async () => {
-    setLoading(true);
+  // `quiet` recarrega sem trocar a tela por "Carregando..." (usado quando uma sincronização termina).
+  const load = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     const [{ data: accs }, { data: txs }] = await Promise.all([
       supabase.from("accounts").select("*").order("created_at"),
       supabase.from("transactions").select("account_id,type,amount"),
@@ -98,6 +99,7 @@ function AccountsPage() {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+  useOnSyncDone(() => load(true));
 
   const getAccessToken = async () => {
     const { data } = await supabase.auth.getSession();
@@ -168,86 +170,21 @@ function AccountsPage() {
   };
 
   const runSync = async (input: { itemId?: string; connectionId?: string }, syncKey: string) => {
-    const accessToken = await getAccessToken();
-    if (!accessToken) { toast.error("Sessão expirada"); return; }
     setSyncingId(syncKey);
     const toastId = toast.loading("Sincronizando contas...");
-    const failure = "O servidor não concluiu a sincronização. Aguarde alguns segundos e tente de novo.";
     try {
-      // 1) Parte leve no servidor: contas e saldos.
-      const sync = await callSyncItem({ data: { accessToken, ...input } });
-      if (!sync || !Array.isArray(sync.accounts)) throw new Error(failure);
-
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) throw new Error("Sessão expirada");
-
-      // 2) Transações: o servidor entrega uma página por requisição (o Worker tem limite de CPU)
-      // e gravamos direto no Supabase daqui, com a sessão do usuário.
-      let inserted = 0;
-      for (const acc of sync.accounts) {
-        let after: string | undefined;
-        let seen = 0;
-        const fullImport = acc.isNew || !sync.since;
-        do {
-          toast.loading(`Importando ${acc.name}${seen ? ` (${seen} transações)` : ""}...`, { id: toastId });
-          const page = await callGetTransactionsPage({
-            data: {
-              accessToken,
-              pluggyAccountId: acc.pluggyId,
-              dateFrom: !acc.isNew && sync.since ? sync.since : undefined,
-              after,
-            },
-          });
-          if (!page || !Array.isArray(page.rows)) throw new Error(failure);
-
-          if (page.rows.length > 0) {
-            const { error, count } = await supabase.from("transactions").upsert(
-              page.rows.map((r) => ({
-                user_id: u.user!.id,
-                type: r.type,
-                amount: r.amount,
-                category: r.category,
-                description: r.description,
-                occurred_at: r.date,
-                account_id: acc.localId,
-                pluggy_transaction_id: r.id,
-                ignore_in_totals: r.ignoreInTotals,
-              })),
-              { onConflict: "pluggy_transaction_id", ignoreDuplicates: true, count: "exact" },
-            );
-            if (error) throw new Error(error.message);
-            inserted += count ?? 0;
-
-            // Só em importação completa: marca as internas também nas já existentes (só esse campo,
-            // preservando categoria/descrição editadas). Nas incrementais não mexe, pra não desfazer
-            // um ajuste manual seu. Em blocos pra não estourar o tamanho da URL.
-            const internalIds = fullImport ? page.rows.filter((r) => r.ignoreInTotals).map((r) => r.id) : [];
-            for (let i = 0; i < internalIds.length; i += 80) {
-              const { error: markError } = await supabase
-                .from("transactions")
-                .update({ ignore_in_totals: true })
-                .in("pluggy_transaction_id", internalIds.slice(i, i + 80));
-              if (markError) throw new Error(markError.message);
-            }
-          }
-          seen += page.rows.length;
-          after = page.cursor ?? undefined;
-        } while (after);
+      const result = await syncConnection(input, (message) => toast.loading(message, { id: toastId }));
+      if (!result) {
+        toast.info("Já existe uma sincronização em andamento. Aguarde ela terminar.", { id: toastId });
+        return;
       }
-
-      // Só marca como sincronizado ao terminar: se falhar no meio, a próxima tentativa recomeça
-      // desde a última sincronização que realmente completou.
-      await supabase.from("bank_connections").update({ last_synced_at: new Date().toISOString() }).eq("id", sync.connectionId);
-
-      const invPart = sync.investmentsSynced > 0 ? `, ${sync.investmentsSynced} investimento(s)` : "";
-      toast.success(`${sync.accounts.length} conta(s), ${inserted} transação(ões) nova(s)${invPart}`, { id: toastId });
-      if (sync.investmentsError) {
-        toast.warning(`Contas sincronizadas, mas os investimentos falharam: ${sync.investmentsError}`);
+      const invPart = result.investments > 0 ? `, ${result.investments} investimento(s)` : "";
+      toast.success(`${result.accounts} conta(s), ${result.inserted} transação(ões) nova(s)${invPart}`, { id: toastId });
+      if (result.investmentsError) {
+        toast.warning(`Contas sincronizadas, mas os investimentos falharam: ${result.investmentsError}`);
       }
-      load();
     } catch (e: any) {
       toast.error(e?.message ?? "Erro ao sincronizar", { id: toastId });
-      load();
     } finally {
       setSyncingId(null);
     }

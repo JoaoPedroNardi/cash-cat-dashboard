@@ -17,6 +17,7 @@ import { todayYMD } from "@/lib/utils";
 import { billingMonthKey, billingCycleRange } from "@/lib/billing";
 import { useBillingClosingDay } from "@/hooks/use-billing-closing-day";
 import { investmentClass, isActiveInvestment } from "@/lib/investments";
+import { useOnSyncDone } from "@/hooks/use-pluggy-sync";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Geral — Finança" }] }),
@@ -83,8 +84,8 @@ function Dashboard() {
 
   // Busca TODAS as transações uma vez. O "saldo total" precisa de tudo;
   // os cards do mês apenas filtram o mês escolhido no cliente.
-  useEffect(() => {
-    (async () => {
+  const loadAll = async () => {
+    {
       const [tx, a, r, inv] = await Promise.all([
         supabase
           .from("transactions")
@@ -107,8 +108,10 @@ function Dashboard() {
       })));
       setRecurring((r.data ?? []).map((x: any) => ({ ...x, amount: Number(x.amount) })));
       setLoading(false);
-    })();
-  }, []);
+    }
+  };
+  useEffect(() => { loadAll(); }, []);
+  useOnSyncDone(loadAll);
 
   const accountBalances = useMemo(() => {
     const map = new Map<string, number>();
