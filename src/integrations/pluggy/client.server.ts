@@ -91,7 +91,6 @@ export async function createConnectToken(oauthRedirectUri?: string): Promise<str
     apiKey,
     body: JSON.stringify({
       options: {
-        avoidDuplicates: true,
         ...(oauthRedirectUri ? { oauthRedirectUri } : {}),
       },
     }),
