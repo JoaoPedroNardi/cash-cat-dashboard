@@ -114,12 +114,12 @@ export async function listAccounts(itemId: string): Promise<PluggyAccount[]> {
   return results;
 }
 
-export async function listTransactions(accountId: string): Promise<PluggyTransaction[]> {
+export async function listTransactions(accountId: string, dateFrom?: string): Promise<PluggyTransaction[]> {
   const apiKey = await getApiKey();
   const all: PluggyTransaction[] = [];
   // /transactions (v1) foi descontinuado (410) — /v2/transactions usa paginação por
   // cursor: o campo `next` já vem pronto como querystring, só concatenar no path.
-  let path = `/v2/transactions?accountId=${accountId}`;
+  let path = `/v2/transactions?accountId=${accountId}${dateFrom ? `&dateFrom=${dateFrom}` : ""}`;
   while (true) {
     const data = await pluggyFetch<{ results: PluggyTransaction[]; next: string | null }>(path, { apiKey });
     all.push(...data.results);

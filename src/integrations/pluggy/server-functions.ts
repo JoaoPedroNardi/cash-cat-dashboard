@@ -40,15 +40,22 @@ export const syncItem = createServerFn({ method: 'POST' })
 
     let pluggyItemId = data.itemId;
     let connectionId = data.connectionId;
+    // Re-sincronizações só buscam transações recentes: baixar o histórico inteiro toda vez
+    // estoura o limite de CPU do Worker (503 "exceeded CPU time limit"). Margem de 7 dias
+    // cobre lançamentos que a Pluggy publica com atraso.
+    let syncSince: string | undefined;
 
     if (connectionId) {
       const { data: conn, error } = await supabase
         .from('bank_connections')
-        .select('id, pluggy_item_id')
+        .select('id, pluggy_item_id, last_synced_at')
         .eq('id', connectionId)
         .single();
       if (error || !conn) throw new Error('Conexão bancária não encontrada');
       pluggyItemId = conn.pluggy_item_id;
+      if (conn.last_synced_at) {
+        syncSince = new Date(new Date(conn.last_synced_at).getTime() - 7 * 86400000).toISOString().slice(0, 10);
+      }
     }
     if (!pluggyItemId) throw new Error('itemId ausente');
 
@@ -62,17 +69,13 @@ export const syncItem = createServerFn({ method: 'POST' })
           pluggy_item_id: pluggyItemId,
           institution_name: item.connector?.name ?? null,
           status: item.status,
-          last_synced_at: new Date().toISOString(),
         })
         .select('id')
         .single();
       if (error) throw new Error(error.message);
       connectionId = inserted.id;
     } else {
-      await supabase
-        .from('bank_connections')
-        .update({ status: item.status, last_synced_at: new Date().toISOString() })
-        .eq('id', connectionId);
+      await supabase.from('bank_connections').update({ status: item.status }).eq('id', connectionId);
     }
 
     const pluggyAccounts = await listAccounts(pluggyItemId);
@@ -98,6 +101,7 @@ export const syncItem = createServerFn({ method: 'POST' })
         .maybeSingle();
 
       let localAccountId = existingAccount?.id;
+      const isNewAccount = !localAccountId;
 
       if (localAccountId) {
         // A instituição só é preenchida quando ainda está vazia: se o usuário renomeou
@@ -136,7 +140,8 @@ export const syncItem = createServerFn({ method: 'POST' })
 
       // Pluggy pode retornar lançamentos com valor 0 (ex: autorizações pendentes);
       // ignoramos, já que amount > 0 é obrigatório no schema (mesma regra da importação de CSV/OFX).
-      const pluggyTxs = (await listTransactions(pAccount.id)).filter((t) => t.amount !== 0);
+      // Conta nova precisa do histórico completo; conta existente só do que veio depois da última sincronização.
+      const pluggyTxs = (await listTransactions(pAccount.id, isNewAccount ? undefined : syncSince)).filter((t) => t.amount !== 0);
       if (pluggyTxs.length === 0) continue;
 
       const rows = pluggyTxs.map((t) => ({
@@ -156,6 +161,10 @@ export const syncItem = createServerFn({ method: 'POST' })
       if (error) throw new Error(error.message);
       transactionsInserted += count ?? 0;
     }
+
+    // Só marca como sincronizado ao terminar: se uma execução falhar no meio, a próxima
+    // volta a buscar desde a última sincronização que realmente completou.
+    await supabase.from('bank_connections').update({ last_synced_at: new Date().toISOString() }).eq('id', connectionId);
 
     return { accountsSynced, transactionsInserted };
   });

@@ -172,6 +172,10 @@ function AccountsPage() {
     setSyncingId(syncKey);
     try {
       const result = await callSyncItem({ data: { accessToken, ...input } });
+      // Se o Worker estoura o limite de CPU, o Cloudflare devolve um 503 que chega aqui sem corpo útil.
+      if (!result || typeof result.accountsSynced !== "number") {
+        throw new Error("O servidor não concluiu a sincronização. Aguarde alguns segundos e tente de novo.");
+      }
       toast.success(`${result.accountsSynced} conta(s), ${result.transactionsInserted} transação(ões) nova(s)`);
       load();
     } catch (e: any) {
@@ -257,7 +261,7 @@ function AccountsPage() {
                   <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition">
                     {a.bank_connection_id && (
                       <button onClick={() => runSync({ connectionId: a.bank_connection_id! }, syncKey)}
-                        disabled={syncingId === syncKey}
+                        disabled={syncingId !== null}
                         className="text-muted-foreground hover:text-primary" title="Sincronizar agora">
                         <RefreshCw className={`h-4 w-4 ${syncingId === syncKey ? "animate-spin" : ""}`} />
                       </button>
